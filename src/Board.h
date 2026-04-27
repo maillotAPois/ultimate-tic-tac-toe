@@ -1,0 +1,34 @@
+#ifndef BOARD_H
+#define BOARD_H
+
+#include <array>
+
+// Symbole present dans une case du plateau
+enum class Cell : char {
+    EMPTY = 0,
+    X     = 1,
+    O     = 2,
+};
+
+inline Cell opponent(Cell c) {
+    return (c == Cell::X) ? Cell::O : Cell::X;
+}
+
+// Sous-grille 3x3 du Ultimate Tic-Tac-Toe
+class Board {
+public:
+    Board();
+
+    Cell get(int row, int col) const;
+    void set(int row, int col, Cell value);
+    bool isEmpty(int row, int col) const;
+
+    bool isFull() const;
+    Cell winner() const;       // EMPTY si aucun gagnant
+    bool isFinished() const;   // gagne ou plein
+
+private:
+    std::array<std::array<Cell, 3>, 3> cells_;
+};
+
+#endif // BOARD_H
