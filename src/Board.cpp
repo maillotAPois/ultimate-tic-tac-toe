@@ -59,3 +59,34 @@ Cell Board::winner() const {
 bool Board::isFinished() const {
     return winner() != Cell::EMPTY || isFull();
 }
+
+namespace {
+    struct Line { int r0, c0, r1, c1, r2, c2; };
+    static const Line kLines[8] = {
+        {0,0, 0,1, 0,2}, {1,0, 1,1, 1,2}, {2,0, 2,1, 2,2}, // lignes
+        {0,0, 1,0, 2,0}, {0,1, 1,1, 2,1}, {0,2, 1,2, 2,2}, // colonnes
+        {0,0, 1,1, 2,2}, {0,2, 1,1, 2,0}                   // diagonales
+    };
+}
+
+int Board::countAlignments(Cell player, int count) const {
+    int total = 0;
+    for (int i = 0; i < 8; ++i) {
+        const Line& L = kLines[i];
+        Cell cs[3] = {
+            cells_[L.r0][L.c0],
+            cells_[L.r1][L.c1],
+            cells_[L.r2][L.c2]
+        };
+        int playerCount = 0;
+        int emptyCount  = 0;
+        for (int k = 0; k < 3; ++k) {
+            if (cs[k] == player)      ++playerCount;
+            else if (cs[k] == Cell::EMPTY) ++emptyCount;
+        }
+        if (playerCount == count && playerCount + emptyCount == 3) {
+            ++total;
+        }
+    }
+    return total;
+}

@@ -27,6 +27,11 @@ public:
     Cell winner() const;       // EMPTY si aucun gagnant
     bool isFinished() const;   // gagne ou plein
 
+    // Compte le nombre de lignes (3 cases alignees) ou ce joueur a
+    // exactement `count` symboles et le reste vide. Sert a evaluer
+    // les menaces (count=2) ou les positions naissantes (count=1).
+    int countAlignments(Cell player, int count) const;
+
 private:
     std::array<std::array<Cell, 3>, 3> cells_;
 };
