@@ -1,0 +1,22 @@
+# Build artifacts
+build/
+bin/
+obj/
+*.o
+*.obj
+*.exe
+*.out
+*.app
+
+# Code::Blocks
+*.depend
+*.layout
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Archive source (extrait dans le repo)
+UTTT_Template.zip
