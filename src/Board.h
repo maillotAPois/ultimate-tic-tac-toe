@@ -14,7 +14,9 @@ inline Cell opponent(Cell c) {
     return (c == Cell::X) ? Cell::O : Cell::X;
 }
 
-// Sous-grille 3x3 du Ultimate Tic-Tac-Toe
+// Sous-grille 3x3 du Ultimate Tic-Tac-Toe.
+// Une partie complete d'UTTT est composee de 9 instances de Board
+// reparties dans une meta-grille 3x3 (cf. UltimateBoard).
 class Board {
 public:
     Board();
