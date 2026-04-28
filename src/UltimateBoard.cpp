@@ -27,3 +27,34 @@ Cell UltimateBoard::subWinner(int br, int bc) const {
 bool UltimateBoard::subFinished(int br, int bc) const {
     return subs_[br][bc].isFinished();
 }
+
+Cell UltimateBoard::metaWinner() const {
+    // On construit une vue 3x3 des gagnants de chaque sous-grille
+    // et on reutilise la detection d'alignement de Board.
+    Board meta;
+    for (int br = 0; br < 3; ++br) {
+        for (int bc = 0; bc < 3; ++bc) {
+            meta.set(br, bc, subs_[br][bc].winner());
+        }
+    }
+    return meta.winner();
+}
+
+int UltimateBoard::countWonSubBoards(Cell player) const {
+    int n = 0;
+    for (int br = 0; br < 3; ++br) {
+        for (int bc = 0; bc < 3; ++bc) {
+            if (subs_[br][bc].winner() == player) ++n;
+        }
+    }
+    return n;
+}
+
+bool UltimateBoard::allSubFinished() const {
+    for (int br = 0; br < 3; ++br) {
+        for (int bc = 0; bc < 3; ++bc) {
+            if (!subs_[br][bc].isFinished()) return false;
+        }
+    }
+    return true;
+}
