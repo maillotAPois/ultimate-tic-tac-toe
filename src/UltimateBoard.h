@@ -29,6 +29,11 @@ public:
     int  countWonSubBoards(Cell player) const;
     bool allSubFinished() const;
 
+    // Renvoie un Board ou chaque case represente le gagnant de la
+    // sous-grille correspondante (EMPTY si pas encore gagnee).
+    // Utile pour evaluer les menaces a l'echelle meta.
+    Board metaView() const;
+
 private:
     std::array<std::array<Board, 3>, 3> subs_;
 };
