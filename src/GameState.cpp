@@ -8,6 +8,10 @@ GameState::GameState()
     , moveCount_(0)
 {}
 
+void GameState::reset() {
+    *this = GameState();
+}
+
 bool GameState::isFinished() const {
     return board_.metaWinner() != Cell::EMPTY || board_.allSubFinished();
 }

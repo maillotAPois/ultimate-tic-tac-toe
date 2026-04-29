@@ -43,6 +43,9 @@ public:
     // libre (un avantage strategique pour lui).
     bool wouldGiveOpponentFreeChoice(const Move& m) const;
 
+    // Reinitialise l'etat (debut d'une nouvelle partie en mode Arena).
+    void reset();
+
 private:
     UltimateBoard board_;
     Cell          currentPlayer_;
