@@ -56,3 +56,39 @@ bool GameState::applyMove(const Move& m) {
     currentPlayer_ = opponent(currentPlayer_);
     return true;
 }
+
+std::vector<Move> GameState::legalMoves() const {
+    std::vector<Move> moves;
+    moves.reserve(20);  // borne raisonnable, evite des reallocations
+
+    if (isFinished()) return moves;
+
+    if (forcedSubRow_ >= 0) {
+        // Joueur force de jouer dans une sous-grille precise
+        int br = forcedSubRow_;
+        int bc = forcedSubCol_;
+        for (int r = 0; r < 3; ++r) {
+            for (int c = 0; c < 3; ++c) {
+                if (board_.sub(br, bc).isEmpty(r, c)) {
+                    moves.push_back(Move(br * 3 + r, bc * 3 + c));
+                }
+            }
+        }
+        return moves;
+    }
+
+    // Libre: parcourir toutes les sous-grilles non terminees
+    for (int br = 0; br < 3; ++br) {
+        for (int bc = 0; bc < 3; ++bc) {
+            if (board_.subFinished(br, bc)) continue;
+            for (int r = 0; r < 3; ++r) {
+                for (int c = 0; c < 3; ++c) {
+                    if (board_.sub(br, bc).isEmpty(r, c)) {
+                        moves.push_back(Move(br * 3 + r, bc * 3 + c));
+                    }
+                }
+            }
+        }
+    }
+    return moves;
+}
