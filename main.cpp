@@ -7,6 +7,14 @@ namespace {
 // Joue une partie complete contre l'IA fournie via `game`.
 // Met a jour notre etat interne en suivant les coups adverses
 // renvoyes par `game.getMove(...)`.
+//
+// Sequencement par tour:
+//   1) game.getMove(opp)   -> recuperer le coup adverse (vide au 1er tour
+//                              si nous commencons)
+//   2) state.applyMove     -> alterne le joueur courant vers nous
+//   3) ai.chooseMove       -> calcule notre coup
+//   4) state.applyMove     -> alterne le joueur courant vers l'adversaire
+//   5) game.setMove        -> envoie au framework
 void playOneGame(GameState& state, AIPlayer& ai) {
     state.reset();
 
