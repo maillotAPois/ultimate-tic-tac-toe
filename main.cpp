@@ -1,4 +1,3 @@
-#include <iostream>
 #include "main.h"
 #include "src/GameState.h"
 #include "src/RandomPlayer.h"
