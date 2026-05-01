@@ -37,6 +37,13 @@ Move MinimaxPlayer::chooseMove(const GameState& state) {
     std::vector<Move> moves = state.legalMoves();
     if (moves.empty()) return Move();
 
+    // Cas degenere: une seule option, pas besoin de recherche.
+    if (moves.size() == 1) return moves[0];
+
+    // Premier coup de la partie: 81 possibilites. La recherche serait
+    // tres lente et le centre de l'echiquier est connu pour etre fort.
+    if (state.moveCount() == 0) return Move(4, 4);
+
     Move bestMove = moves[0];
     int  bestScore = -INF;
     int  alpha = -INF;
