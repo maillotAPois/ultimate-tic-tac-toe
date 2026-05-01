@@ -44,6 +44,13 @@ Move MinimaxPlayer::chooseMove(const GameState& state) {
     // tres lente et le centre de l'echiquier est connu pour etre fort.
     if (state.moveCount() == 0) return Move(4, 4);
 
+    // Profondeur effective: on approfondit quand le branching factor
+    // diminue (fin de partie). Permet de garder des temps raisonnables
+    // tout en ayant une meilleure vision en endgame.
+    int effectiveDepth = depth_;
+    if (state.moveCount() > 30) effectiveDepth = depth_ + 1;
+    if (state.moveCount() > 50) effectiveDepth = depth_ + 2;
+
     Move bestMove = moves[0];
     int  bestScore = -INF;
     int  alpha = -INF;
@@ -54,7 +61,7 @@ Move MinimaxPlayer::chooseMove(const GameState& state) {
         next.applyMove(moves[i]);
         // -negamax: on inverse car le score retourne est du point de vue
         // de l'adversaire (joueur courant apres notre coup).
-        int score = -negamax(next, depth_ - 1, -beta, -alpha);
+        int score = -negamax(next, effectiveDepth - 1, -beta, -alpha);
         if (score > bestScore) {
             bestScore = score;
             bestMove  = moves[i];
