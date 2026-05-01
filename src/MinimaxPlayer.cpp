@@ -72,6 +72,10 @@ Move MinimaxPlayer::chooseMove(const GameState& state) {
 }
 
 int MinimaxPlayer::negamax(GameState state, int depth, int alpha, int beta) const {
+    // Negamax = formulation symetrique du minimax: on multiplie la valeur
+    // par -1 a chaque appel recursif ce qui evite de distinguer les
+    // niveaux MIN et MAX. L'evaluation est donc toujours faite du point
+    // de vue du joueur courant a la feuille (cf. evaluate).
     if (depth == 0 || state.isFinished()) {
         return evaluate(state);
     }
