@@ -1,6 +1,6 @@
 #include "main.h"
 #include "src/GameState.h"
-#include "src/RandomPlayer.h"
+#include "src/MinimaxPlayer.h"
 
 namespace {
 
@@ -43,8 +43,8 @@ int main() {
     // alwaysPlayFirst est ignore en mode Arene (alternance auto X/O).
     game.initialize(100, Level::VERY_HARD_2, Mode::ARENA, false, "RomThpt");
 
-    GameState state;
-    RandomPlayer ai;  // Sera remplace par MinimaxPlayer dans la prochaine PR
+    GameState    state;
+    MinimaxPlayer ai(/*depth=*/5);
 
     while (!game.isAllGameFinish()) {
         playOneGame(state, ai);

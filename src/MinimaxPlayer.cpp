@@ -1,5 +1,4 @@
 #include "MinimaxPlayer.h"
-#include <climits>
 
 namespace {
     // Constantes d'evaluation. INF >> tout score heuristique pour
