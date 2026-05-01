@@ -28,6 +28,8 @@
 		<Compiler>
 			<Add option="-Wall" />
 			<Add option="-fexceptions" />
+			<Add option="-std=c++17" />
+			<Add directory="src" />
 		</Compiler>
 		<Linker>
 			<Add option="allegro_font-5.2.dll" />
@@ -39,6 +41,16 @@
 		</Linker>
 		<Unit filename="main.cpp" />
 		<Unit filename="main.h" />
+		<Unit filename="src/AIPlayer.h" />
+		<Unit filename="src/Board.cpp" />
+		<Unit filename="src/Board.h" />
+		<Unit filename="src/GameState.cpp" />
+		<Unit filename="src/GameState.h" />
+		<Unit filename="src/Move.h" />
+		<Unit filename="src/RandomPlayer.cpp" />
+		<Unit filename="src/RandomPlayer.h" />
+		<Unit filename="src/UltimateBoard.cpp" />
+		<Unit filename="src/UltimateBoard.h" />
 		<Extensions>
 			<code_completion />
 			<envvars />
