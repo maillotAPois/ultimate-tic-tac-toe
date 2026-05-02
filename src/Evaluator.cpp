@@ -49,9 +49,16 @@ int Evaluator::evaluate(const GameState& state) {
 
     // 3) Menaces sur la meta-grille: lignes/colonnes/diagonales ou un
     //    joueur a 2 sous-grilles gagnees et la 3e n'est pas perdue.
-    Board metaView = b.metaView();
-    score += META_THREAT_VAL * metaView.countAlignments(me, 2);
-    score -= META_THREAT_VAL * metaView.countAlignments(them, 2);
+    Board metaView   = b.metaView();
+    int   meThreats   = metaView.countAlignments(me, 2);
+    int   themThreats = metaView.countAlignments(them, 2);
+    score += META_THREAT_VAL * meThreats;
+    score -= META_THREAT_VAL * themThreats;
+
+    // Fork: avoir 2+ menaces meta simultanees est quasi gagnant car
+    // l'adversaire ne peut pas toutes les bloquer en un seul coup.
+    if (meThreats   >= 2) score += META_THREAT_VAL * 2;
+    if (themThreats >= 2) score -= META_THREAT_VAL * 2;
 
     // 4) Menaces internes aux sous-grilles non terminees.
     for (int br = 0; br < 3; ++br) {
