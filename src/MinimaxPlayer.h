@@ -29,8 +29,20 @@ private:
     double timeBudgetMs_;
     int    maxDepth_;
 
+    struct ScoredMove {
+        Move move;
+        int  score;
+    };
+
     // Recherche a profondeur fixe et renvoie le meilleur coup racine.
-    Move searchRoot(const GameState& state, int depth) const;
+    // `moves` est mis a jour avec le score de chaque coup pour servir
+    // d'ordre initial a la profondeur suivante (move ordering, ameliore
+    // significativement l'efficacite des coupures alpha-beta).
+    Move searchRoot(const GameState& state, int depth,
+                    std::vector<ScoredMove>& moves) const;
+
+    // Score rapide pour l'ordre initial des coups (avant la 1re recherche).
+    static int quickScore(const GameState& state, const Move& m);
 
     // Renvoie le score du noeud du point de vue du joueur courant.
     int negamax(GameState state, int depth, int alpha, int beta) const;

@@ -1,5 +1,6 @@
 #include "MinimaxPlayer.h"
 #include "Evaluator.h"
+#include <algorithm>
 #include <chrono>
 
 namespace {
@@ -42,23 +43,33 @@ Move MinimaxPlayer::chooseMove(const GameState& state) {
     if (moves.size() == 1)         return moves[0];
     if (state.moveCount() == 0)    return Move(4, 4);
 
+    // Pre-tri rapide pour orienter la 1re passe.
+    std::vector<ScoredMove> scored;
+    scored.reserve(moves.size());
+    for (size_t i = 0; i < moves.size(); ++i) {
+        ScoredMove sm;
+        sm.move  = moves[i];
+        sm.score = quickScore(state, moves[i]);
+        scored.push_back(sm);
+    }
+    std::sort(scored.begin(), scored.end(),
+              [](const ScoredMove& a, const ScoredMove& b) { return a.score > b.score; });
+
     if (!useID_) {
-        return searchRoot(state, depth_);
+        return searchRoot(state, depth_, scored);
     }
 
     // Iterative deepening: on commence court et on approfondit
     // tant que le budget temps le permet.
-    Move best = moves[0];
+    Move best = scored[0].move;
     g_deadline = Clock::now()
                + std::chrono::milliseconds(static_cast<long long>(timeBudgetMs_));
     g_useDeadline = true;
 
     try {
         for (int d = 2; d <= maxDepth_; ++d) {
-            Move iterBest = searchRoot(state, d);
+            Move iterBest = searchRoot(state, d, scored);
             best = iterBest;  // recherche a profondeur d completee
-            // On verifie le temps avant de relancer une profondeur plus
-            // grande qui couterait nettement plus cher.
             if (Clock::now() > g_deadline) break;
         }
     } catch (const TimeOut&) {
@@ -69,23 +80,54 @@ Move MinimaxPlayer::chooseMove(const GameState& state) {
     return best;
 }
 
-Move MinimaxPlayer::searchRoot(const GameState& state, int depth) const {
-    std::vector<Move> moves = state.legalMoves();
-    Move bestMove = moves[0];
+int MinimaxPlayer::quickScore(const GameState& state, const Move& m) {
+    int score = 0;
+    int br = m.row / 3, bc = m.col / 3;
+    int lr = m.row % 3, lc = m.col % 3;
+
+    // Bonus si le coup gagne directement la sous-grille (tres prioritaire)
+    Board sim = state.board().sub(br, bc);
+    sim.set(lr, lc, state.currentPlayer());
+    if (sim.winner() == state.currentPlayer()) score += 500;
+
+    // Centre du plateau global: position de prestige
+    if (m.row == 4 && m.col == 4) score += 80;
+    // Centre d'une sous-grille
+    if (lr == 1 && lc == 1) score += 30;
+    // Coins d'une sous-grille
+    if ((lr == 0 || lr == 2) && (lc == 0 || lc == 2)) score += 10;
+
+    // Penalite si le coup envoie l'adversaire vers une sous-grille libre
+    // (sous-grille deja finie => libre choice). Mauvais en general.
+    int nbr = lr, nbc = lc;
+    if (state.board().subFinished(nbr, nbc)) score -= 60;
+
+    return score;
+}
+
+Move MinimaxPlayer::searchRoot(const GameState& state, int depth,
+                               std::vector<ScoredMove>& moves) const {
+    Move bestMove = moves[0].move;
     int  bestScore = -INF;
     int  alpha = -INF;
     const int beta = INF;
 
     for (size_t i = 0; i < moves.size(); ++i) {
         GameState next = state;
-        next.applyMove(moves[i]);
+        next.applyMove(moves[i].move);
         int score = -negamax(next, depth - 1, -beta, -alpha);
+        moves[i].score = score;
         if (score > bestScore) {
             bestScore = score;
-            bestMove  = moves[i];
+            bestMove  = moves[i].move;
         }
         if (score > alpha) alpha = score;
     }
+    // Tri pour la prochaine iteration de l'iterative deepening:
+    // le coup le plus prometteur sera explore en premier ce qui
+    // ameliore drastiquement les coupures alpha-beta.
+    std::sort(moves.begin(), moves.end(),
+              [](const ScoredMove& a, const ScoredMove& b) { return a.score > b.score; });
     return bestMove;
 }
 
