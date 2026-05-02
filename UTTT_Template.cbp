@@ -46,6 +46,8 @@
 		<Unit filename="src/Board.h" />
 		<Unit filename="src/GameState.cpp" />
 		<Unit filename="src/GameState.h" />
+		<Unit filename="src/MinimaxPlayer.cpp" />
+		<Unit filename="src/MinimaxPlayer.h" />
 		<Unit filename="src/Move.h" />
 		<Unit filename="src/RandomPlayer.cpp" />
 		<Unit filename="src/RandomPlayer.h" />
