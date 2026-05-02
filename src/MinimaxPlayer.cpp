@@ -1,36 +1,15 @@
 #include "MinimaxPlayer.h"
+#include "Evaluator.h"
 
 namespace {
-    // Constantes d'evaluation. INF >> tout score heuristique pour
-    // garantir que les terminaux dominent l'eval intermediaire.
-    static const int INF      = 1000000;
-    static const int WIN_VAL  = 100000;
-    static const int SUB_VAL  = 1000;
+    // INF >> tout score heuristique pour que les terminaux dominent.
+    static const int INF = 1000000;
 }
 
 MinimaxPlayer::MinimaxPlayer(int depth) : depth_(depth) {}
 
 int MinimaxPlayer::evaluate(const GameState& state) const {
-    Cell me   = state.currentPlayer();
-    Cell them = opponent(me);
-
-    Cell w = state.winner();
-    if (w == me)   return WIN_VAL;
-    if (w == them) return -WIN_VAL;
-
-    // Egalite par decompte des sous-grilles si match termine
-    if (state.isFinished()) {
-        int diff = state.board().countWonSubBoards(me)
-                 - state.board().countWonSubBoards(them);
-        if (diff > 0) return WIN_VAL;
-        if (diff < 0) return -WIN_VAL;
-        return 0;
-    }
-
-    int score = 0;
-    score += SUB_VAL * (state.board().countWonSubBoards(me)
-                      - state.board().countWonSubBoards(them));
-    return score;
+    return Evaluator::evaluate(state);
 }
 
 Move MinimaxPlayer::chooseMove(const GameState& state) {

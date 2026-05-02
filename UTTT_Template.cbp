@@ -44,6 +44,8 @@
 		<Unit filename="src/AIPlayer.h" />
 		<Unit filename="src/Board.cpp" />
 		<Unit filename="src/Board.h" />
+		<Unit filename="src/Evaluator.cpp" />
+		<Unit filename="src/Evaluator.h" />
 		<Unit filename="src/GameState.cpp" />
 		<Unit filename="src/GameState.h" />
 		<Unit filename="src/MinimaxPlayer.cpp" />
