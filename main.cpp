@@ -40,7 +40,9 @@ void playOneGame(GameState& state, AIPlayer& ai) {
 
 int main() {
     // Initialisation: 100 parties en mode Arene contre VERY_HARD_2.
-    // alwaysPlayFirst est ignore en mode Arene (alternance auto X/O).
+    // Pour valider un niveau il faut au minimum 80% de victoires
+    // (egalites non comptees). alwaysPlayFirst est ignore en mode Arene
+    // (alternance automatique X/O sur les 100 parties).
     game.initialize(100, Level::VERY_HARD_2, Mode::ARENA, false, "RomThpt");
 
     GameState     state;
