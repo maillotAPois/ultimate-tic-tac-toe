@@ -15,8 +15,8 @@ namespace {
 //   3) ai.chooseMove       -> calcule notre coup
 //   4) state.applyMove     -> alterne le joueur courant vers l'adversaire
 //   5) game.setMove        -> envoie au framework
-void playOneGame(GameState& state, AIPlayer& ai) {
-    state.reset();
+void playOneGame(AIPlayer& ai) {
+    GameState state;
 
     while (!game.isFinish()) {
         // 1) Recuperer le coup adverse (si disponible)
@@ -45,11 +45,10 @@ int main() {
     // (alternance automatique X/O sur les 100 parties).
     game.initialize(100, Level::VERY_HARD_2, Mode::ARENA, false, "RomThpt");
 
-    GameState     state;
     MinimaxPlayer ai(/*depth=*/4);
 
     while (!game.isAllGameFinish()) {
-        playOneGame(state, ai);
+        playOneGame(ai);
     }
 
     return 0;
