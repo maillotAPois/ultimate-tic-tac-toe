@@ -8,10 +8,6 @@ GameState::GameState()
     , moveCount_(0)
 {}
 
-void GameState::reset() {
-    *this = GameState();
-}
-
 bool GameState::isFinished() const {
     return board_.metaWinner() != Cell::EMPTY || board_.allSubFinished();
 }
@@ -59,24 +55,6 @@ bool GameState::applyMove(const Move& m) {
 
     currentPlayer_ = opponent(currentPlayer_);
     return true;
-}
-
-bool GameState::wouldGiveOpponentFreeChoice(const Move& m) const {
-    if (!m.isValid()) return false;
-    int nextBr = m.row % 3;
-    int nextBc = m.col % 3;
-    // Apres le coup, la sous-grille cible serait-elle finie ?
-    // On regarde le statut actuel: si elle est deja finie, oui.
-    // Si elle ne l'est pas, on verifie si le coup la termine.
-    if (board_.subFinished(nextBr, nextBc)) return true;
-    // Le coup pourrait aussi terminer la sous-grille cible si on joue dedans
-    // (cas: forcedSub == nextSub et le coup gagne ou remplit).
-    if (m.row / 3 == nextBr && m.col / 3 == nextBc) {
-        Board sim = board_.sub(nextBr, nextBc);
-        sim.set(m.row % 3, m.col % 3, currentPlayer_);
-        if (sim.isFinished()) return true;
-    }
-    return false;
 }
 
 std::vector<Move> GameState::legalMoves() const {

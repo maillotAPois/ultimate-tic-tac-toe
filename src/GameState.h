@@ -38,14 +38,6 @@ public:
 
     const UltimateBoard& board() const { return board_; }
 
-    // True si l'adversaire est libre de choisir sa sous-grille apres le
-    // coup `m`. Utilise pour penaliser les coups qui rendent l'adversaire
-    // libre (un avantage strategique pour lui).
-    bool wouldGiveOpponentFreeChoice(const Move& m) const;
-
-    // Reinitialise l'etat (debut d'une nouvelle partie en mode Arena).
-    void reset();
-
 private:
     UltimateBoard board_;
     Cell          currentPlayer_;
