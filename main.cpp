@@ -46,12 +46,7 @@ int main() {
     game.initialize(100, Level::VERY_HARD_2, Mode::ARENA, false, "RomThpt");
 
     GameState     state;
-    MinimaxPlayer ai(/*fallback depth=*/5);
-    // Budget temps en accord avec les timeouts indicatifs du sujet:
-    //  - VERY_HARD: 200 ms par coup, 1000 ms pour le tout 1er coup.
-    // On garde une marge de securite (~150 ms) pour ne pas frole le
-    // timeout en cas de variabilite d'execution.
-    ai.enableIterativeDeepening(/*timeBudgetMs=*/150.0, /*maxDepth=*/12);
+    MinimaxPlayer ai(/*depth=*/4);
 
     while (!game.isAllGameFinish()) {
         playOneGame(state, ai);
