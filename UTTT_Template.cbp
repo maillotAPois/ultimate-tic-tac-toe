@@ -49,8 +49,6 @@
 		<Unit filename="src/MinimaxPlayer.cpp" />
 		<Unit filename="src/MinimaxPlayer.h" />
 		<Unit filename="src/Move.h" />
-		<Unit filename="src/RandomPlayer.cpp" />
-		<Unit filename="src/RandomPlayer.h" />
 		<Unit filename="src/UltimateBoard.cpp" />
 		<Unit filename="src/UltimateBoard.h" />
 		<Extensions>
