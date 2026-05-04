@@ -3,6 +3,9 @@
 Projet C++ A3 Alternant ESILV (2025-2026). Implementation d'une IA pour
 le jeu Ultimate Tic-Tac-Toe via la librairie `libUTTTLib.a` fournie.
 
+**Niveau cible**: MEDIUM_2 (validation au minimum 80% de victoires en
+mode Arene, egalites non comptees).
+
 ## Architecture
 
 ```
@@ -13,33 +16,22 @@ src/
   Move.h           - Coup (row, col) en coordonnees globales
   GameState.h/cpp  - Etat complet d'une partie + regles UTTT
   AIPlayer.h       - Interface (chooseMove)
-  RandomPlayer.h/cpp  - Baseline pour tests de non-regression
-  MinimaxPlayer.h/cpp - IA principale (negamax + alpha-beta + ID)
-  Evaluator.h/cpp  - Fonction d'evaluation heuristique
+  MinimaxPlayer.h/cpp - IA: negamax + alpha-beta + eval simple
 ```
 
 ## Algorithme
 
-L'IA s'appuie sur:
-- **Negamax** (variante symetrique du minimax) avec **elagage alpha-beta**.
-- **Iterative deepening**: recherche a 1, 2, 3, ... plis tant que le
-  budget temps (150 ms par defaut) le permet. Si l'on est interrompu
-  en plein milieu d'une profondeur, on conserve le meilleur coup
-  trouve a la profondeur precedente.
-- **Move ordering**: les scores obtenus a la profondeur N servent
-  a trier les coups pour la profondeur N+1, ce qui ameliore drastiquement
-  les coupures alpha-beta.
+L'IA s'appuie sur un **negamax** (variante symetrique du minimax) avec
+**elagage alpha-beta** a profondeur fixe (4 demi-coups par defaut).
 
 ### Heuristique d'evaluation
 
-Du point de vue du joueur courant, somme ponderee de:
-1. Sous-grilles gagnees, ponderees par leur position dans la meta-grille
-   (centre = 4, coins = 3, bords = 2).
-2. Menaces (2-en-ligne) sur la meta-grille — bonus exponentiel pour les
-   "forks" (2 menaces simultanees).
-3. Menaces (2-en-ligne) dans les sous-grilles non terminees.
-4. Possession du centre du plateau global (4, 4).
-5. Liberte de choix de la sous-grille suivante.
+Du point de vue du joueur courant:
+- `+VALEUR_GAIN` si le joueur courant a gagne la partie
+- `-VALEUR_GAIN` s'il a perdu
+- Sinon: `SUB_VAL * (sous-grilles gagnees - sous-grilles perdues)`
+
+Cette heuristique simple suffit pour valider les niveaux EASY et MEDIUM.
 
 ## Compilation
 
@@ -51,13 +43,11 @@ Allegro requises.
 
 - **POO** stricte: aucune fonction libre metier; chaque responsabilite
   est portee par une classe (Board, UltimateBoard, GameState, AIPlayer,
-  Evaluator, MinimaxPlayer).
+  MinimaxPlayer).
 - **STL**: `std::array` (taille fixe, pas d'allocation dynamique pour
-  les grilles), `std::vector` pour les listes de coups, `std::sort`
-  + lambdas pour le move ordering, `std::chrono::steady_clock` pour
-  le budget temps.
+  les grilles), `std::vector` pour les listes de coups.
 - **Symetrie negamax** plutot que minimax explicite: divise la taille
   du code de la recherche par 2 et evite les bugs MIN/MAX.
-- **Sentinelle d'exception** (`TimeOut`) pour interrompre proprement
-  une recherche depassant le budget temps, sans polluer le code de
-  retours d'erreur.
+- **Alpha-beta**: coupure beta des qu'on a prouve qu'une branche est
+  pire que ce qu'on a deja trouve. Reduit massivement le nombre de
+  noeuds explores.
