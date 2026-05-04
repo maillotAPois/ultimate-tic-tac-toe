@@ -2,9 +2,10 @@
 
 namespace {
     // INF >> tout score heuristique pour que les terminaux dominent.
-    static const int INF     = 1000000;
-    static const int WIN_VAL = 100000;
-    static const int SUB_VAL = 1000;
+    static const int INF        = 1000000;
+    static const int WIN_VAL    = 100000;
+    static const int SUB_VAL    = 1000;  // sous-grille gagnee
+    static const int THREAT_VAL = 10;    // 2-en-ligne dans une sous-grille
 }
 
 MinimaxPlayer::MinimaxPlayer(int depth) : depth_(depth) {}
@@ -26,9 +27,21 @@ int MinimaxPlayer::evaluate(const GameState& state) const {
         return 0;
     }
 
-    // Heuristique: difference de sous-grilles deja gagnees.
-    return SUB_VAL * (state.board().countWonSubBoards(me)
-                    - state.board().countWonSubBoards(them));
+    // Heuristique: sous-grilles gagnees + petit signal sur les menaces
+    // 2-en-ligne dans les sous-grilles encore en cours. Sans ce dernier
+    // terme, l'eval reste a 0 sur la plupart des positions intermediaires
+    // et le minimax cherche a l'aveugle.
+    int score = SUB_VAL * (state.board().countWonSubBoards(me)
+                         - state.board().countWonSubBoards(them));
+    for (int br = 0; br < 3; ++br) {
+        for (int bc = 0; bc < 3; ++bc) {
+            const Board& sub = state.board().sub(br, bc);
+            if (sub.isFinished()) continue;
+            score += THREAT_VAL * sub.countAlignments(me, 2);
+            score -= THREAT_VAL * sub.countAlignments(them, 2);
+        }
+    }
+    return score;
 }
 
 Move MinimaxPlayer::chooseMove(const GameState& state) {
