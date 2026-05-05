@@ -60,6 +60,7 @@ private:
     std::uint64_t hashState(const GameState& state) const;
 
     int  negamax(GameState& state, int depth, int ply, int alpha, int beta, SearchCtx& ctx);
+    int  quiescence(GameState& state, int alpha, int beta, int qdepth, SearchCtx& ctx);
     int  evaluate(const GameState& state) const;
     bool timedOut(SearchCtx& ctx) const;
 };
