@@ -438,7 +438,7 @@ int MinimaxPlayer::quiescence(GameState& state, int alpha, int beta, int qdepth,
     if (timedOut(ctx)) return 0;
 
     int standPat = evaluate(state);
-    if (qdepth >= 4)        return standPat;
+    if (qdepth >= 6)        return standPat;
     if (state.isFinished()) return standPat;
     if (standPat >= beta)   return beta;
     if (standPat > alpha)   alpha = standPat;
