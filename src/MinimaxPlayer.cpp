@@ -346,8 +346,11 @@ int MinimaxPlayer::negamax(GameState& state, int depth, int ply, int alpha, int 
         ttBest = it->second.best;
     }
 
-    if (depth == 0 || state.isFinished()) {
+    if (state.isFinished()) {
         return evaluate(state);
+    }
+    if (depth == 0) {
+        return quiescence(state, alpha, beta, 0, ctx);
     }
 
     std::vector<Move> moves = state.legalMoves();
@@ -426,4 +429,37 @@ int MinimaxPlayer::negamax(GameState& state, int depth, int ply, int alpha, int 
     tt_[key] = e;
 
     return best;
+}
+
+// Quiescence search: a la frontiere d'horizon, on n'arrete que sur des
+// positions "calmes". On etend uniquement les coups tactiques (gain
+// d'une sous-grille ou gain global) pour eviter l'effet d'horizon.
+int MinimaxPlayer::quiescence(GameState& state, int alpha, int beta, int qdepth, SearchCtx& ctx) {
+    if (timedOut(ctx)) return 0;
+
+    int standPat = evaluate(state);
+    if (qdepth >= 4)        return standPat;
+    if (state.isFinished()) return standPat;
+    if (standPat >= beta)   return beta;
+    if (standPat > alpha)   alpha = standPat;
+
+    Cell mover = state.currentPlayer();
+    std::vector<Move> moves = state.legalMoves();
+    for (size_t i = 0; i < moves.size(); ++i) {
+        const Move& m = moves[i];
+        int pf_r = state.forcedSubRow(), pf_c = state.forcedSubCol();
+        state.applyMove(m);
+        bool tactical = (state.winner() != Cell::EMPTY) ||
+                        (state.board().subWinner(m.row / 3, m.col / 3) == mover);
+        if (!tactical) {
+            state.undoMove(m, pf_r, pf_c);
+            continue;
+        }
+        int score = -quiescence(state, -beta, -alpha, qdepth + 1, ctx);
+        state.undoMove(m, pf_r, pf_c);
+        if (ctx.stop) return 0;
+        if (score >= beta)  return beta;
+        if (score > alpha)  alpha = score;
+    }
+    return alpha;
 }
