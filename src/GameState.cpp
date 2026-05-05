@@ -35,6 +35,16 @@ bool GameState::isLegal(const Move& m) const {
     return true;
 }
 
+void GameState::undoMove(const Move& m, int prevForcedRow, int prevForcedCol) {
+    // Etat avant: m a ete joue par opponent(currentPlayer_), donc le
+    // joueur de retour est opponent du joueur courant.
+    currentPlayer_ = opponent(currentPlayer_);
+    board_.place(m.row, m.col, Cell::EMPTY);
+    --moveCount_;
+    forcedSubRow_ = prevForcedRow;
+    forcedSubCol_ = prevForcedCol;
+}
+
 bool GameState::applyMove(const Move& m) {
     if (!isLegal(m)) return false;
 

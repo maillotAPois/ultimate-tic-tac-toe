@@ -19,6 +19,12 @@ public:
     // car l'IA genere toujours des coups legaux).
     bool applyMove(const Move& m);
 
+    // Annule un coup precedemment applique. Necessite les valeurs de
+    // forcedSubRow/Col d'AVANT le coup (stockees par l'appelant).
+    // Permet une recherche minimax sans copies de GameState (gain
+    // significatif sur la profondeur effective a budget temps fixe).
+    void undoMove(const Move& m, int prevForcedRow, int prevForcedCol);
+
     // Coups legaux pour le joueur courant en respectant les regles
     // de redirection UTTT.
     std::vector<Move> legalMoves() const;

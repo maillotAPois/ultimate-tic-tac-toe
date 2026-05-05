@@ -1,57 +1,62 @@
 #include "Board.h"
 
-Board::Board() {
-    for (int r = 0; r < 3; ++r) {
-        for (int c = 0; c < 3; ++c) {
-            cells_[r][c] = Cell::EMPTY;
-        }
+namespace {
+    // Masques 9 bits des 8 lignes possibles (3 horizontales, 3 verticales,
+    // 2 diagonales). Indice de bit = row*3 + col.
+    constexpr std::uint16_t LINE_MASKS[8] = {
+        0x007u, // ligne 0 : (0,0) (0,1) (0,2)
+        0x038u, // ligne 1 : (1,0) (1,1) (1,2)
+        0x1C0u, // ligne 2 : (2,0) (2,1) (2,2)
+        0x049u, // col  0  : (0,0) (1,0) (2,0)
+        0x092u, // col  1  : (0,1) (1,1) (2,1)
+        0x124u, // col  2  : (0,2) (1,2) (2,2)
+        0x111u, // diag NW-SE : (0,0) (1,1) (2,2)
+        0x054u, // diag NE-SW : (0,2) (1,1) (2,0)
+    };
+    constexpr std::uint16_t FULL_MASK = 0x1FFu; // 9 bits a 1
+
+    // popcount portable pour un mot 16-bits (compile en POPCNT sur x86).
+    inline int popcount9(std::uint16_t x) {
+        int c = 0;
+        while (x) { x &= (x - 1); ++c; }
+        return c;
     }
 }
 
+Board::Board()
+    : bitsX_(0)
+    , bitsO_(0)
+{}
+
 Cell Board::get(int row, int col) const {
-    return cells_[row][col];
+    std::uint16_t bit = 1u << (row * 3 + col);
+    if (bitsX_ & bit) return Cell::X;
+    if (bitsO_ & bit) return Cell::O;
+    return Cell::EMPTY;
 }
 
 void Board::set(int row, int col, Cell value) {
-    cells_[row][col] = value;
+    std::uint16_t bit = 1u << (row * 3 + col);
+    bitsX_ &= ~bit;
+    bitsO_ &= ~bit;
+    if (value == Cell::X) bitsX_ |= bit;
+    else if (value == Cell::O) bitsO_ |= bit;
 }
 
 bool Board::isEmpty(int row, int col) const {
-    return cells_[row][col] == Cell::EMPTY;
+    std::uint16_t bit = 1u << (row * 3 + col);
+    return ((bitsX_ | bitsO_) & bit) == 0;
 }
 
 bool Board::isFull() const {
-    for (int r = 0; r < 3; ++r) {
-        for (int c = 0; c < 3; ++c) {
-            if (cells_[r][c] == Cell::EMPTY) return false;
-        }
-    }
-    return true;
+    return ((bitsX_ | bitsO_) & FULL_MASK) == FULL_MASK;
 }
 
 Cell Board::winner() const {
-    // Lignes
-    for (int r = 0; r < 3; ++r) {
-        Cell c0 = cells_[r][0];
-        if (c0 != Cell::EMPTY && c0 == cells_[r][1] && c0 == cells_[r][2]) {
-            return c0;
-        }
-    }
-    // Colonnes
-    for (int c = 0; c < 3; ++c) {
-        Cell c0 = cells_[0][c];
-        if (c0 != Cell::EMPTY && c0 == cells_[1][c] && c0 == cells_[2][c]) {
-            return c0;
-        }
-    }
-    // Diagonales
-    Cell d0 = cells_[0][0];
-    if (d0 != Cell::EMPTY && d0 == cells_[1][1] && d0 == cells_[2][2]) {
-        return d0;
-    }
-    Cell d1 = cells_[0][2];
-    if (d1 != Cell::EMPTY && d1 == cells_[1][1] && d1 == cells_[2][0]) {
-        return d1;
+    for (int i = 0; i < 8; ++i) {
+        std::uint16_t m = LINE_MASKS[i];
+        if ((bitsX_ & m) == m) return Cell::X;
+        if ((bitsO_ & m) == m) return Cell::O;
     }
     return Cell::EMPTY;
 }
@@ -60,33 +65,14 @@ bool Board::isFinished() const {
     return winner() != Cell::EMPTY || isFull();
 }
 
-namespace {
-    struct Line { int r0, c0, r1, c1, r2, c2; };
-    static const Line kLines[8] = {
-        {0,0, 0,1, 0,2}, {1,0, 1,1, 1,2}, {2,0, 2,1, 2,2}, // lignes
-        {0,0, 1,0, 2,0}, {0,1, 1,1, 2,1}, {0,2, 1,2, 2,2}, // colonnes
-        {0,0, 1,1, 2,2}, {0,2, 1,1, 2,0}                   // diagonales
-    };
-}
-
 int Board::countAlignments(Cell player, int count) const {
+    std::uint16_t pl = (player == Cell::X) ? bitsX_ : bitsO_;
+    std::uint16_t op = (player == Cell::X) ? bitsO_ : bitsX_;
     int total = 0;
     for (int i = 0; i < 8; ++i) {
-        const Line& L = kLines[i];
-        Cell cs[3] = {
-            cells_[L.r0][L.c0],
-            cells_[L.r1][L.c1],
-            cells_[L.r2][L.c2]
-        };
-        int playerCount = 0;
-        int emptyCount  = 0;
-        for (int k = 0; k < 3; ++k) {
-            if (cs[k] == player)      ++playerCount;
-            else if (cs[k] == Cell::EMPTY) ++emptyCount;
-        }
-        if (playerCount == count && playerCount + emptyCount == 3) {
-            ++total;
-        }
+        std::uint16_t m = LINE_MASKS[i];
+        if ((op & m) != 0) continue;          // ligne morte (adv present)
+        if (popcount9(static_cast<std::uint16_t>(pl & m)) == count) ++total;
     }
     return total;
 }
