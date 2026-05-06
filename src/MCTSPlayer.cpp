@@ -2,12 +2,15 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 
 MCTSPlayer::MCTSPlayer(int budgetMs, double cExplore)
     : budgetMs_(budgetMs)
     , cExplore_(cExplore)
     , rng_(0xC0FFEE) // graine fixe -> reproductible
+    , hasTree_(false)
+    , mctsIters_(0)
 {}
 
 namespace {
@@ -32,7 +35,24 @@ int MCTSPlayer::expand(int nodeIdx, GameState& state) {
     Move m = n.untried.back();
     n.untried.pop_back();
 
+    Cell mover = state.currentPlayer();    // qui joue le coup m
     state.applyMove(m);
+
+    // Prior PUCT: regard statique sur le coup pour biaiser l'expansion.
+    //   - Capture de sous-grille pour `mover`     -> 4.0  (tres bon)
+    //   - Envoi adversaire vers sub deja finie    -> 0.3  (tres mauvais:
+    //     l'adversaire aura libre choix au prochain coup)
+    //   - Sinon                                    -> 1.0  (neutre)
+    double prior = 1.0;
+    int br = m.row / 3, bc = m.col / 3;
+    if (state.board().subWinner(br, bc) == mover) {
+        prior = 4.0;
+    } else {
+        int fr = state.forcedSubRow(), fc = state.forcedSubCol();
+        if (fr >= 0 && state.board().subFinished(fr, fc)) {
+            prior = 0.3;
+        }
+    }
 
     Node child;
     child.move     = m;
@@ -40,6 +60,7 @@ int MCTSPlayer::expand(int nodeIdx, GameState& state) {
     child.toMove   = state.currentPlayer();
     child.visits   = 0;
     child.wins     = 0.0;
+    child.prior    = prior;
     child.terminal = state.isFinished();
     if (!child.terminal) {
         child.untried = state.legalMoves();
@@ -62,14 +83,20 @@ int MCTSPlayer::select(int rootIdx, GameState& state) {
         }
         if (n.children.empty()) return idx; // securite
 
-        // UCT: argmax_c (winrate + c * sqrt(ln(N) / n_c)).
-        double logN = std::log(static_cast<double>(n.visits));
+        // PUCT: argmax_c (Q(c) + c_explore * P(c) * sqrt(N) / (1 + n_c)).
+        // - Q(c)  : winrate du POV du joueur qui a fait le coup vers c.
+        //   FPU=0.5 pour les enfants non visites (estimation neutre).
+        // - P(c)  : prior calcule a l'expansion (1.0 neutre, 4.0 capture
+        //   de sub, 0.3 envoi vers sub finie). Biaise l'exploration.
+        // - sqrt(N)/(1+n_c) : terme exploration AlphaZero, decroit en
+        //   fonction des visites de l'enfant.
+        double sqrtN  = std::sqrt(static_cast<double>(n.visits));
         int    bestIdx = n.children[0];
         double bestVal = -std::numeric_limits<double>::infinity();
         for (size_t i = 0; i < n.children.size(); ++i) {
             const Node& c = nodes_[n.children[i]];
-            double winrate = (c.visits > 0) ? (c.wins / c.visits) : 0.0;
-            double explore = cExplore_ * std::sqrt(logN / std::max(1, c.visits));
+            double winrate = (c.visits > 0) ? (c.wins / c.visits) : 0.5;
+            double explore = cExplore_ * c.prior * sqrtN / (1.0 + c.visits);
             double v = winrate + explore;
             if (v > bestVal) { bestVal = v; bestIdx = n.children[i]; }
         }
@@ -101,9 +128,6 @@ double MCTSPlayer::rollout(GameState state) {
             int br = ms[i].row / 3, bc = ms[i].col / 3;
             int lr = ms[i].row % 3, lc = ms[i].col % 3;
             const Board& sub = state.board().sub(br, bc);
-            // Check inline: existe-t-il une ligne contenant (lr,lc) ou
-            // les 2 autres cases ont deja `turn`? Si oui, jouer ce coup
-            // gagne la sous-grille.
             bool wins = false;
             for (int li = 0; li < 8 && !wins; ++li) {
                 bool inLine = false;
@@ -162,10 +186,10 @@ void MCTSPlayer::backprop(int leaf, double rolloutEncoded) {
     }
 }
 
-Move MCTSPlayer::bestChildMove(int rootIdx) const {
+int MCTSPlayer::bestChildIndex(int rootIdx) const {
     const Node& root = nodes_[rootIdx];
-    int    bestIdx   = -1;
-    int    bestVisits = -1;
+    int bestIdx    = -1;
+    int bestVisits = -1;
     for (size_t i = 0; i < root.children.size(); ++i) {
         const Node& c = nodes_[root.children[i]];
         if (c.visits > bestVisits) {
@@ -173,52 +197,173 @@ Move MCTSPlayer::bestChildMove(int rootIdx) const {
             bestIdx    = root.children[i];
         }
     }
-    if (bestIdx < 0) return Move();
-    return nodes_[bestIdx].move;
+    return bestIdx;
+}
+
+// Compaction: garde uniquement le sous-arbre enracine en newRoot.
+// Walk DFS, copie dans un nouveau vector, remappe parent/children.
+// Apres l'appel, le nouveau root est en nodes_[0].
+void MCTSPlayer::reroot(int newRoot) {
+    std::vector<int>  remap(nodes_.size(), -1);
+    std::vector<Node> compact;
+    compact.reserve(nodes_.size());
+
+    // DFS iteratif depuis newRoot.
+    std::vector<int> stack;
+    stack.push_back(newRoot);
+    while (!stack.empty()) {
+        int idx = stack.back();
+        stack.pop_back();
+        if (remap[idx] >= 0) continue;
+        remap[idx] = static_cast<int>(compact.size());
+        compact.push_back(nodes_[idx]);
+        const std::vector<int>& ch = nodes_[idx].children;
+        for (size_t k = 0; k < ch.size(); ++k) stack.push_back(ch[k]);
+    }
+
+    // Fix parent + children indices via remap. Le nouveau root (index 0)
+    // a parent = -1 explicitement (son ancien parent n'est pas dans le
+    // sous-arbre conserve).
+    for (size_t i = 0; i < compact.size(); ++i) {
+        Node& n = compact[i];
+        if (i == 0) n.parent = -1;
+        else        n.parent = remap[n.parent];
+        for (size_t k = 0; k < n.children.size(); ++k) {
+            n.children[k] = remap[n.children[k]];
+        }
+    }
+
+    nodes_.swap(compact);
+}
+
+Move MCTSPlayer::findOppMove(const GameState& prev, const GameState& curr) const {
+    // Coup adverse = case devenue occupee entre prev et curr (UTTT applique
+    // exactement un coup entre deux etats consecutifs cote framework).
+    for (int r = 0; r < 9; ++r) {
+        for (int c = 0; c < 9; ++c) {
+            Cell pv = prev.board().cellAt(r, c);
+            Cell cv = curr.board().cellAt(r, c);
+            if (pv == Cell::EMPTY && cv != Cell::EMPTY) {
+                return Move(r, c);
+            }
+        }
+    }
+    return Move();
 }
 
 Move MCTSPlayer::chooseMove(const GameState& state) {
     std::vector<Move> moves = state.legalMoves();
     if (moves.empty())     return Move();
-    if (moves.size() == 1) return moves[0];
+    if (moves.size() == 1) {
+        // On joue ce coup mais on doit aussi maintenir la coherence de
+        // l'arbre cote tree-reuse: le plus simple est d'invalider.
+        hasTree_ = false;
+        return moves[0];
+    }
 
     // Coup d'ouverture connu: centre du centre.
-    if (state.moveCount() == 0) return Move(4, 4);
+    if (state.moveCount() == 0) {
+        hasTree_ = false;  // pas d'arbre prealable
+        // On rebuilde quand meme un arbre racine pour le prochain tour.
+        // Mais ici on retourne directement sans MCTS.
+        // On pourrait MCTS-er mais (4,4) est connu optimal au tour 1.
+        Move opening(4, 4);
+        // Initialise l'arbre minimal pour pouvoir reuse au tour suivant.
+        nodes_.clear();
+        nodes_.reserve(50000);
+        Node root;
+        root.move = Move(); root.parent = -1;
+        root.toMove = state.currentPlayer();
+        root.visits = 0; root.wins = 0.0; root.prior = 1.0;
+        root.terminal = false; root.untried = moves;
+        nodes_.push_back(root);
+        // Force expand de (4,4) pour avoir le child correspondant.
+        // Plus simple: on laisse le tour suivant rebuilder.
+        hasTree_ = false;
+        return opening;
+    }
 
     // Raccourci tactique: gain immediat.
     Cell me = state.currentPlayer();
     for (size_t i = 0; i < moves.size(); ++i) {
         GameState next = state;
         next.applyMove(moves[i]);
-        if (next.winner() == me) return moves[i];
+        if (next.winner() == me) {
+            hasTree_ = false; // shortcut court-circuite l'arbre
+            return moves[i];
+        }
     }
 
-    // Initialise l'arbre avec la position actuelle comme racine.
-    nodes_.clear();
-    nodes_.reserve(50000);
-    Node root;
-    root.move     = Move();
-    root.parent   = -1;
-    root.toMove   = state.currentPlayer();
-    root.visits   = 0;
-    root.wins     = 0.0;
-    root.terminal = state.isFinished();
-    root.untried  = moves;
-    nodes_.push_back(root);
+    // ---- Tree reuse ----
+    // Tente de retrouver le coup adverse et de re-rooter sur le grandchild
+    // correspondant. Si impossible (premier appel, tree perdu, opp a joue
+    // un coup non explore), on rebuild from scratch.
+    bool reused = false;
+    if (hasTree_ && !nodes_.empty()) {
+        Move oppMv = findOppMove(rootState_, state);
+        if (oppMv.isValid()) {
+            const std::vector<int>& kids = nodes_[0].children;
+            int gc = -1;
+            for (size_t k = 0; k < kids.size(); ++k) {
+                const Node& c = nodes_[kids[k]];
+                if (c.move.row == oppMv.row && c.move.col == oppMv.col) {
+                    gc = kids[k]; break;
+                }
+            }
+            if (gc >= 0) {
+                reroot(gc);
+                rootState_ = state;
+                reused = true;
+            }
+        }
+    }
+    if (!reused) {
+        nodes_.clear();
+        nodes_.reserve(50000);
+        Node root;
+        root.move     = Move();
+        root.parent   = -1;
+        root.toMove   = state.currentPlayer();
+        root.visits   = 0;
+        root.wins     = 0.0;
+        root.prior    = 1.0;
+        root.terminal = state.isFinished();
+        root.untried  = moves;
+        nodes_.push_back(root);
+        rootState_ = state;
+        hasTree_   = true;
+    }
 
-    auto deadline = Clock::now() + std::chrono::milliseconds(budgetMs_);
-    int  iters = 0;
+    // ---- Boucle MCTS ----
+    TimePoint deadline = Clock::now() + std::chrono::milliseconds(budgetMs_);
+    long long iters = 0;
     while (Clock::now() < deadline) {
-        // Verification temps tous les 64 iters pour limiter l'overhead.
         for (int b = 0; b < 64 && Clock::now() < deadline; ++b) {
-            GameState s = state;
+            GameState s = rootState_;
             int leaf = select(0, s);
             double encoded = rollout(s);
             backprop(leaf, encoded);
             ++iters;
         }
     }
-    (void)iters;
+    mctsIters_ = iters;
 
-    return bestChildMove(0);
+    // Choix final + re-root sur notre coup choisi pour le tour suivant.
+    int bestIdx = bestChildIndex(0);
+    if (bestIdx < 0) {
+        hasTree_ = false;
+        return moves[0];
+    }
+    Move chosen = nodes_[bestIdx].move;
+
+    // [BENCH] log
+    std::fprintf(stderr,
+        "MCTS mv=%d iters=%lld nodes=%zu chosen=(%d,%d) reuse=%d\n",
+        state.moveCount(), iters, nodes_.size(),
+        chosen.row, chosen.col, reused ? 1 : 0);
+    std::fflush(stderr);
+
+    reroot(bestIdx);
+    rootState_.applyMove(chosen);
+    return chosen;
 }

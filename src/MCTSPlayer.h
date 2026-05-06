@@ -2,6 +2,7 @@
 #define MCTS_PLAYER_H
 
 #include "AIPlayer.h"
+#include "GameState.h"
 
 #include <chrono>
 #include <cstdint>
@@ -49,16 +50,37 @@ private:
         double         wins;       // wins du POV du joueur qui DOIT
                                    // jouer dans le PARENT (= celui qui
                                    // a fait le coup vers ici).
+        double         prior;      // PUCT prior (1.0 neutre, >1 favorise,
+                                   // <1 defavorise). Calcule au moment
+                                   // de l'expansion en regardant le
+                                   // resultat statique du coup.
         bool           terminal;
     };
 
     std::vector<Node> nodes_;
 
-    int  expand(int nodeIdx, GameState& state);
-    int  select(int rootIdx, GameState& state);
+    // Tree reuse: on garde l'arbre entre deux appels a chooseMove.
+    // - rootState_  : etat correspondant au noeud racine actuel (=
+    //   apres notre dernier coup, ou apres reroot grandchild).
+    // - hasTree_    : false au tout premier appel ou si le re-root
+    //   echoue (coup adverse non explore par MCTS au tour precedent).
+    // Apres reroot/rebuild, la racine est toujours nodes_[0].
+    GameState rootState_;
+    bool      hasTree_;
+    long long mctsIters_;     // [BENCH] iterations du dernier appel
+
+    int   expand(int nodeIdx, GameState& state);
+    int   select(int rootIdx, GameState& state);
     double rollout(GameState state);
-    void backprop(int leaf, double reward);
-    Move bestChildMove(int rootIdx) const;
+    void  backprop(int leaf, double reward);
+    int   bestChildIndex(int rootIdx) const;
+
+    // Compaction de l'arbre: garde uniquement le sous-arbre enracine
+    // en `newRoot`, le replace en index 0, et remappe parent/children.
+    void  reroot(int newRoot);
+    // Retrouve le coup adverse en comparant deux etats (cellule
+    // devenue occupee). Retourne un Move invalide si pas trouve.
+    Move  findOppMove(const GameState& prev, const GameState& curr) const;
 };
 
 #endif // MCTS_PLAYER_H

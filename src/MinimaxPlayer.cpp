@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
+#include <chrono>
 
 namespace {
     // INF >> tout score heuristique pour que les terminaux dominent.
@@ -61,6 +63,11 @@ MinimaxPlayer::MinimaxPlayer(int depth, int maxDepth, int budgetMs)
     : depth_(depth)
     , maxDepth_(maxDepth)
     , budgetMs_(budgetMs)
+    , nodes_(0)
+    , qnodes_(0)
+    , tt_lookups_(0)
+    , tt_hits_(0)
+    , iter_depth_reached_(0)
 {
     for (int i = 0; i < KILLERS_MAX_PLY; ++i) {
         killers_[i][0] = Move();
@@ -179,17 +186,18 @@ int MinimaxPlayer::evaluate(const GameState& state) const {
     int score = 0;
 
     // 1) Score positionnel par sous-grille, pondere par l'importance de
-    //    la sous-grille dans la meta. La fonction evalSubBoard donne
-    //    un score riche (-100..+100) qui capture le degre de controle,
-    //    pas seulement le binaire gagnee/non.
+    //    la sous-grille dans la meta. evalSubBoard donne un score riche
+    //    (-100..+100) qui capture le degre de controle.
     for (int br = 0; br < 3; ++br) {
         for (int bc = 0; bc < 3; ++bc) {
             score += POS_W[br][bc] * evalSubBoard(state.board().sub(br, bc), me);
         }
     }
 
-    // 2) Score de la meta-grille (sous-grilles gagnees), ponderation
-    //    forte car decisive pour la victoire globale.
+    // 2) Score de la meta-grille (sous-grilles gagnees) avec filtrage
+    //    des lignes mortes: si une sous-grille de la ligne meta est
+    //    pleine sans gagnant (DRAWN), aucun camp ne peut completer la
+    //    ligne -> on n'attribue pas de score a cette ligne.
     Board metaView = state.board().metaView();
     int lines[8][3][2] = {
         {{0,0},{0,1},{0,2}},
@@ -203,20 +211,27 @@ int MinimaxPlayer::evaluate(const GameState& state) const {
     };
     for (int li = 0; li < 8; ++li) {
         int p = 0, o = 0;
+        bool dead = false;
         for (int k = 0; k < 3; ++k) {
-            Cell c = metaView.get(lines[li][k][0], lines[li][k][1]);
+            int br = lines[li][k][0], bc = lines[li][k][1];
+            Cell c = metaView.get(br, bc);
             if (c == me)        ++p;
             else if (c == them) ++o;
+            else if (state.board().sub(br, bc).isFull()) { dead = true; break; }
         }
-        // Coefficient meta = 400x: une 2-en-ligne meta vaut ~ une sous-grille
-        // gagnee au centre, ce qui reflete son poids strategique reel
-        // (deux sous-grilles capturees alignees ~= 1 coup du gain global).
+        if (dead) continue;
+        // Coef meta = 400x: une 2-en-ligne meta vaut ~ une sous-grille
+        // gagnee au centre, ce qui reflete son poids strategique reel.
         score += 400 * lineScore(p, o);
     }
 
-    if (state.forcedSubRow() < 0) {
-        score += FREE_CHOICE_VAL;
-    }
+    // 3) Free-choice elargi: si la sous-grille forcee est deja finie
+    //    (gagnee OU pleine sans gagnant), le joueur courant a le libre
+    //    choix selon les regles UTTT. Le code naif ne capturait que
+    //    forcedSub<0, ce qui rate le cas tres frequent fin de partie.
+    int fr = state.forcedSubRow(), fc = state.forcedSubCol();
+    bool freeChoice = (fr < 0) || state.board().subFinished(fr, fc);
+    if (freeChoice) score += FREE_CHOICE_VAL;
 
     return score;
 }
@@ -262,6 +277,11 @@ Move MinimaxPlayer::chooseMove(const GameState& constState) {
         killers_[i][1] = Move();
     }
 
+    // [BENCH] Reset des compteurs et chrono.
+    nodes_ = qnodes_ = tt_lookups_ = tt_hits_ = 0;
+    iter_depth_reached_ = 0;
+    auto bench_t0 = std::chrono::steady_clock::now();
+
     // Move ordering racine via apply/undo.
     std::vector<Scored> ordered;
     ordered.reserve(moves.size());
@@ -305,6 +325,7 @@ Move MinimaxPlayer::chooseMove(const GameState& constState) {
         }
 
         if (!aborted) {
+            iter_depth_reached_ = d;
             bestOverall = bestThisIter;
             // Mat trouve: inutile d'aller plus profond.
             if (bestScore >= WIN_VAL - 1000) break;
@@ -323,17 +344,41 @@ Move MinimaxPlayer::chooseMove(const GameState& constState) {
         if (ctx.stop) break;
     }
 
+    // [BENCH] Log per-move stats sur stderr.
+    auto bench_t1 = std::chrono::steady_clock::now();
+    long long elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               bench_t1 - bench_t0).count();
+    double elapsed_s = elapsed_ms > 0 ? (double)elapsed_ms / 1000.0 : 1e-6;
+    unsigned long long total_nodes = (unsigned long long)(nodes_ + qnodes_);
+    double knps = (double)total_nodes / elapsed_s / 1000.0;
+    double tt_hit_rate = tt_lookups_ > 0
+        ? 100.0 * (double)tt_hits_ / (double)tt_lookups_ : 0.0;
+    std::fprintf(stderr,
+        "BENCH mv=%d depth=%d N=%llu Q=%llu TT=%.1f%% t=%lldms knps=%.0f legal=%zu\n",
+        state.moveCount(),
+        iter_depth_reached_,
+        (unsigned long long)nodes_,
+        (unsigned long long)qnodes_,
+        tt_hit_rate,
+        elapsed_ms,
+        knps,
+        moves.size());
+    std::fflush(stderr);
+
     return bestOverall;
 }
 
 int MinimaxPlayer::negamax(GameState& state, int depth, int ply, int alpha, int beta, SearchCtx& ctx) {
     if (timedOut(ctx)) return 0;
 
+    ++nodes_;
     int alphaOrig = alpha;
     std::uint64_t key = hashState(state);
     Move ttBest;  // invalide par defaut
+    ++tt_lookups_;
     auto it = tt_.find(key);
     if (it != tt_.end() && it->second.depth >= depth) {
+        ++tt_hits_;
         const TTEntry& e = it->second;
         if (e.flag == TT_EXACT) return e.score;
         if (e.flag == TT_LOWER && e.score > alpha) alpha = e.score;
@@ -437,6 +482,7 @@ int MinimaxPlayer::negamax(GameState& state, int depth, int ply, int alpha, int 
 int MinimaxPlayer::quiescence(GameState& state, int alpha, int beta, int qdepth, SearchCtx& ctx) {
     if (timedOut(ctx)) return 0;
 
+    ++qnodes_;
     int standPat = evaluate(state);
     if (qdepth >= 6)        return standPat;
     if (state.isFinished()) return standPat;

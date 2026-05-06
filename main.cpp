@@ -1,6 +1,8 @@
 #include "main.h"
 #include "src/GameState.h"
-#include "src/MinimaxPlayer.h"
+#include "src/MCTSPlayer.h"
+
+#include <cstdio>
 
 namespace {
 
@@ -39,21 +41,32 @@ void playOneGame(AIPlayer& ai) {
 } // namespace
 
 int main() {
-    // Initialisation: 100 parties en mode Arene contre MEDIUM_2.
-    // Pour valider un niveau il faut au minimum 80% de victoires
-    // (egalites non comptees). alwaysPlayFirst est ignore en mode Arene
-    // (alternance automatique X/O sur les 100 parties).
-    game.initialize(100, Level::MEDIUM_2, Mode::ARENA, false, "RomThpt");
+    // [BENCH] 20 parties en mode Arene contre MEDIUM_2 pour mesurer.
+    // (En production: 100 parties pour valider le niveau a 80%.)
+    game.initialize(20, Level::HARD_1, Mode::ARENA, false, "RomThpt");
 
-    // Contraintes prof: 100 parties < 6 min total. Avec apply/undo,
-    // 70ms/coup donne ~3 min total => on peut doubler le budget. 140ms
-    // devrait tenir dans ~6 min avec confort.
-    // depth=1 plancher (iterative deepening termine toujours), maxDepth=12.
-    MinimaxPlayer ai(/*depth=*/1, /*maxDepth=*/12, /*budgetMs=*/140);
+    // MCTS-PUCT: budget 140ms/coup. cExplore=1.4. Tree reuse + PUCT
+    // priors actifs (capture-sub favorisee, envoi-vers-sub-finie penalise).
+    MCTSPlayer ai(/*budgetMs=*/140, /*cExplore=*/1.4);
 
+    int wins = 0, losses = 0, draws = 0, total = 0;
     while (!game.isAllGameFinish()) {
         playOneGame(ai);
+        Winner w = game.getWinner();
+        ++total;
+        if (w == IA)              ++wins;
+        else if (w == PLAYER)     ++losses;
+        else                      ++draws;
+        std::fprintf(stderr,
+            "GAME #%d done: winner=%d  running W=%d L=%d D=%d\n",
+            total, (int)w, wins, losses, draws);
+        std::fflush(stderr);
     }
+    std::fprintf(stderr,
+        "FINAL W=%d L=%d D=%d  win_rate(no_draws)=%.1f%%\n",
+        wins, losses, draws,
+        (wins + losses) > 0 ? 100.0 * wins / (wins + losses) : 0.0);
+    std::fflush(stderr);
 
     return 0;
 }

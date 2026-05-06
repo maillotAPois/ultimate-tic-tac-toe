@@ -57,6 +57,14 @@ private:
     void recordKiller(int ply, const Move& m);
     bool isKiller(int ply, const Move& m) const;
 
+    // Instrumentation (benchmark only): comptes par appel a chooseMove,
+    // logges sur stderr. Aucun impact fonctionnel sur le choix du coup.
+    std::uint64_t nodes_;
+    std::uint64_t qnodes_;
+    std::uint64_t tt_lookups_;
+    std::uint64_t tt_hits_;
+    int           iter_depth_reached_;
+
     std::uint64_t hashState(const GameState& state) const;
 
     int  negamax(GameState& state, int depth, int ply, int alpha, int beta, SearchCtx& ctx);

@@ -20,3 +20,9 @@ obj/
 
 # Archive source (extrait dans le repo)
 UTTT_Template.zip
+
+# Bench logs (instrumentation locale, non versionnee)
+bench*_stderr.log
+bench*_stdout.log
+benchH*_stderr.log
+benchH*_stdout.log
