@@ -5,7 +5,7 @@ LDFLAGS  := -static -static-libgcc -static-libstdc++
 INCLUDES := -I. -Isrc
 LIBS     := -L. -lUTTTLib
 
-SRCS     := main.cpp src/Board.cpp src/GameState.cpp src/MinimaxPlayer.cpp src/MCTSPlayer.cpp src/UltimateBoard.cpp
+SRCS     := main.cpp src/Board.cpp src/GameState.cpp src/MCTSPlayer.cpp src/UltimateBoard.cpp
 STUBS_C  := build/allegro_stubs.c
 STUBS_O  := build/allegro_stubs.o
 TARGET   := uttt.exe
