@@ -11,10 +11,8 @@ MCTSPlayer::MCTSPlayer(int budgetMs, double cExplore)
 {}
 
 int MCTSPlayer::expand(int nodeIdx, GameState& state) {
-    Node& n = nodes_[nodeIdx];
-    Move m = n.untried.back();
-    n.untried.pop_back();
-
+    Move m = nodes_[nodeIdx].untried.back();
+    nodes_[nodeIdx].untried.pop_back();
     Cell mover = state.currentPlayer();
     state.applyMove(m);
 
@@ -22,28 +20,20 @@ int MCTSPlayer::expand(int nodeIdx, GameState& state) {
     // dans une sub deja finie (lui donne libre choix), 1.0 sinon.
     double prior = 1.0;
     int br = m.row / 3, bc = m.col / 3;
-    if (state.board().subWinner(br, bc) == mover) {
-        prior = 4.0;
-    } else {
+    if (state.board().subWinner(br, bc) == mover) prior = 4.0;
+    else {
         int fr = state.forcedSubRow(), fc = state.forcedSubCol();
-        if (fr >= 0 && state.board().subFinished(fr, fc)) {
-            prior = 0.3;
-        }
+        if (fr >= 0 && state.board().subFinished(fr, fc)) prior = 0.3;
     }
 
     Node child;
-    child.move     = m;
-    child.parent   = nodeIdx;
-    child.toMove   = state.currentPlayer();
-    child.visits   = 0;
-    child.wins     = 0.0;
-    child.prior    = prior;
+    child.move = m; child.parent = nodeIdx;
+    child.toMove = state.currentPlayer();
+    child.visits = 0; child.wins = 0.0; child.prior = prior;
     child.terminal = state.isFinished();
-    if (!child.terminal) {
-        child.untried = state.legalMoves();
-    }
+    if (!child.terminal) child.untried = state.legalMoves();
     int childIdx = static_cast<int>(nodes_.size());
-    nodes_.push_back(child);
+    nodes_.push_back(std::move(child));
     nodes_[nodeIdx].children.push_back(childIdx);
     return childIdx;
 }

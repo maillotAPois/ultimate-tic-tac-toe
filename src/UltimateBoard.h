@@ -4,35 +4,24 @@
 #include "Board.h"
 #include <array>
 
-// Plateau complet 9x9 d'Ultimate Tic-Tac-Toe = meta-grille 3x3 de Board.
-// Conventions: tout indice (row, col) global est dans [0..8].
-// La sous-grille correspondante est (row/3, col/3) et la case
-// locale est (row%3, col%3).
+// Plateau 9x9 = meta-grille 3x3 de Board. Indices globaux (row, col)
+// dans [0..8]; sous-grille = (row/3, col/3); case locale = (row%3, col%3).
 class UltimateBoard {
 public:
-    UltimateBoard();
+    UltimateBoard() = default;
 
-    // Acces aux sous-grilles (coords meta 0..2)
-    const Board& sub(int br, int bc) const;
-    Board&       sub(int br, int bc);
+    const Board& sub(int br, int bc) const { return subs_[br][bc]; }
+    Board&       sub(int br, int bc)       { return subs_[br][bc]; }
 
-    // Acces a une case via coords globales (0..8)
     Cell cellAt(int row, int col) const;
     void place(int row, int col, Cell player);
 
-    // Statut d'une sous-grille (dispo, gagnee ou pleine)
     Cell subWinner(int br, int bc) const;
     bool subFinished(int br, int bc) const;
 
-    // Statut global
     Cell metaWinner() const;
     int  countWonSubBoards(Cell player) const;
     bool allSubFinished() const;
-
-    // Renvoie un Board ou chaque case represente le gagnant de la
-    // sous-grille correspondante (EMPTY si pas encore gagnee).
-    // Utile pour evaluer les menaces a l'echelle meta.
-    Board metaView() const;
 
 private:
     std::array<std::array<Board, 3>, 3> subs_;
