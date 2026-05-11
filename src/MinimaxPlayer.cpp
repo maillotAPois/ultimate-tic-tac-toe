@@ -31,40 +31,20 @@ namespace {
         int  score;
     };
 
-    // Table Zobrist: 81 cases x 2 joueurs + 9 sous-grilles cibles + 1 bit
-    // de joueur courant. Generee de maniere deterministe (xorshift) pour
-    // que le binaire reste reproductible.
-    struct ZobristTable {
-        std::uint64_t cells[81][2];
-        std::uint64_t forced[10]; // 0..8 + 9 = libre
-        std::uint64_t side;
-        ZobristTable() {
-            std::uint64_t s = 0x9E3779B97F4A7C15ULL; // graine
-            auto next = [&]() {
-                s ^= s << 13;
-                s ^= s >> 7;
-                s ^= s << 17;
-                return s;
-            };
-            for (int i = 0; i < 81; ++i) {
-                cells[i][0] = next();
-                cells[i][1] = next();
-            }
-            for (int i = 0; i < 10; ++i) forced[i] = next();
-            side = next();
-        }
-    };
-    const ZobristTable kZob;
 }
 
 MinimaxPlayer::MinimaxPlayer(int depth, int maxDepth, int budgetMs)
     : depth_(depth)
     , maxDepth_(maxDepth)
     , budgetMs_(budgetMs)
+    , moveBufs_(MOVE_BUFS_MAX)
 {
     for (int i = 0; i < KILLERS_MAX_PLY; ++i) {
         killers_[i][0] = Move();
         killers_[i][1] = Move();
+    }
+    for (int i = 0; i < MOVE_BUFS_MAX; ++i) {
+        moveBufs_[i].reserve(20);
     }
 }
 
@@ -84,23 +64,9 @@ bool MinimaxPlayer::isKiller(int ply, const Move& m) const {
 }
 
 std::uint64_t MinimaxPlayer::hashState(const GameState& state) const {
-    std::uint64_t h = 0;
-    for (int r = 0; r < 9; ++r) {
-        for (int c = 0; c < 9; ++c) {
-            Cell v = state.board().cellAt(r, c);
-            if (v == Cell::EMPTY) continue;
-            int idx = r * 9 + c;
-            int who = (v == Cell::X) ? 0 : 1;
-            h ^= kZob.cells[idx][who];
-        }
-    }
-    int f = 9; // libre par defaut
-    if (state.forcedSubRow() >= 0) {
-        f = state.forcedSubRow() * 3 + state.forcedSubCol();
-    }
-    h ^= kZob.forced[f];
-    if (state.currentPlayer() == Cell::O) h ^= kZob.side;
-    return h;
+    // Le hash est desormais maintenu incrementalement par GameState
+    // (apply/undoMove). Cette fonction devient O(1).
+    return state.hash();
 }
 
 namespace {
@@ -352,7 +318,8 @@ int MinimaxPlayer::negamax(GameState& state, int depth, int ply, int alpha, int 
         return quiescence(state, alpha, beta, 0, ctx);
     }
 
-    std::vector<Move> moves = state.legalMoves();
+    std::vector<Move>& moves = moveBufs_[ply < MOVE_BUFS_MAX ? ply : MOVE_BUFS_MAX - 1];
+    state.legalMoves(moves);
     if (moves.empty()) return evaluate(state);
 
     // Move ordering: PV move (TT best) d'abord, puis tri par eval si la
@@ -395,12 +362,25 @@ int MinimaxPlayer::negamax(GameState& state, int depth, int ply, int alpha, int 
                   [](const Scored& a, const Scored& b) { return a.score > b.score; });
     }
 
+    // PVS (Principal Variation Search): le premier coup (PV) est cherche
+    // en fenetre complete; les suivants en fenetre nulle [alpha, alpha+1]
+    // pour prouver rapidement qu'ils sont inferieurs au PV. Si un coup
+    // null-window passe au-dessus d'alpha (mais sous beta), on re-cherche
+    // en fenetre complete. Speedup ~2x sur les bonnes orderings.
     int  best     = -INF;
     Move bestMove = ordered[0].move;
     for (size_t i = 0; i < ordered.size(); ++i) {
         int pf_r = state.forcedSubRow(), pf_c = state.forcedSubCol();
         state.applyMove(ordered[i].move);
-        int score = -negamax(state, depth - 1, ply + 1, -beta, -alpha, ctx);
+        int score;
+        if (i == 0) {
+            score = -negamax(state, depth - 1, ply + 1, -beta, -alpha, ctx);
+        } else {
+            score = -negamax(state, depth - 1, ply + 1, -alpha - 1, -alpha, ctx);
+            if (!ctx.stop && score > alpha && score < beta) {
+                score = -negamax(state, depth - 1, ply + 1, -beta, -alpha, ctx);
+            }
+        }
         state.undoMove(ordered[i].move, pf_r, pf_c);
         if (ctx.stop) return 0;
         if (score > WIN_VAL - 1000)        score -= WIN_DEPTH_PENALTY;
@@ -443,7 +423,11 @@ int MinimaxPlayer::quiescence(GameState& state, int alpha, int beta, int qdepth,
     if (standPat > alpha)   alpha = standPat;
 
     Cell mover = state.currentPlayer();
-    std::vector<Move> moves = state.legalMoves();
+    // Buffers reserves au-dela de KILLERS_MAX_PLY pour la quiescence (qdepth 0..5).
+    int qIdx = KILLERS_MAX_PLY + qdepth;
+    if (qIdx >= MOVE_BUFS_MAX) qIdx = MOVE_BUFS_MAX - 1;
+    std::vector<Move>& moves = moveBufs_[qIdx];
+    state.legalMoves(moves);
     for (size_t i = 0; i < moves.size(); ++i) {
         const Move& m = moves[i];
         int pf_r = state.forcedSubRow(), pf_c = state.forcedSubCol();

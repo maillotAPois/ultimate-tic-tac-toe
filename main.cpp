@@ -49,7 +49,7 @@ int main() {
     // 70ms/coup donne ~3 min total => on peut doubler le budget. 140ms
     // devrait tenir dans ~6 min avec confort.
     // depth=1 plancher (iterative deepening termine toujours), maxDepth=12.
-    MinimaxPlayer ai(/*depth=*/1, /*maxDepth=*/12, /*budgetMs=*/200);
+    MinimaxPlayer ai(/*depth=*/1, /*maxDepth=*/12, /*budgetMs=*/270);
 
     while (!game.isAllGameFinish()) {
         playOneGame(ai);

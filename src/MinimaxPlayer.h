@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdint>
 #include <unordered_map>
+#include <vector>
 
 // Joueur base sur l'algorithme negamax (variante symetrique du minimax)
 // avec elagage alpha-beta, iterative deepening et table de transposition
@@ -53,6 +54,12 @@ private:
     // positions analogues -> meilleur move ordering -> plus de coupures.
     static constexpr int KILLERS_MAX_PLY = 32;
     Move killers_[KILLERS_MAX_PLY][2];
+
+    // Buffers de coups pre-alloues, un par profondeur de recherche.
+    // Evite l'allocation d'un std::vector a chaque appel de negamax/
+    // quiescence (chemin chaud).
+    static constexpr int MOVE_BUFS_MAX = 64;
+    std::vector<std::vector<Move>> moveBufs_;
 
     void recordKiller(int ply, const Move& m);
     bool isKiller(int ply, const Move& m) const;
