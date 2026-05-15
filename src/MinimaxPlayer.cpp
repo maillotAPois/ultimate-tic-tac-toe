@@ -21,10 +21,18 @@ namespace {
         {3, 2, 3},
     };
 
-    constexpr int SUB_VAL         = 200;   // sous-grille gagnee, * poids positionnel
-    constexpr int META_THREAT_VAL = 500;   // 2-en-ligne au niveau meta
-    constexpr int LOCAL_THREAT    = 2;     // 2-en-ligne dans sous-grille * POS
-    constexpr int FREE_CHOICE_VAL = 30;    // bonus si on peut jouer ou on veut
+    // Eval asymetrique (pessimiste): le progres de l'adversaire pese plus
+    // lourd que le notre. L'IA perd par sur-evaluation -- elle fonce dans
+    // des positions "+1700" en realite perdues. En gonflant les menaces
+    // adverses et en escomptant les notres, elle devient mefiante et
+    // refuse d'entrer dans ces pieges.
+    constexpr int META_MINE = 300;   // ligne meta en notre faveur
+    constexpr int META_OPP  = 480;   // ligne meta en faveur adverse
+    constexpr int FORK_MINE = 1500;  // >= 2 menaces meta a nous
+    constexpr int FORK_OPP  = 2600;  // >= 2 menaces meta adverses
+    constexpr int FREE_CHOICE_VAL  = 120;  // malus de controle (libre choix donne)
+    constexpr int FORCED_MY_OPEN   = 200;  // 2-en-ligne ouverte a nous dans la sub forcee
+    constexpr int FORCED_THEM_OPEN = 350;  // 2-en-ligne ouverte adverse (on doit bloquer)
 
     struct Scored {
         Move move;
@@ -97,6 +105,33 @@ namespace {
         return 0;
     }
 
+    // Nombre de 2-en-ligne "ouvertes" (2 a soi, 0 adverse) d'un joueur
+    // dans une sous-grille: un coup les transforme en victoire de sub.
+    int countOpenTwos(const Board& b, Cell me) {
+        Cell them = opponent(me);
+        int lines[8][3][2] = {
+            {{0,0},{0,1},{0,2}},
+            {{1,0},{1,1},{1,2}},
+            {{2,0},{2,1},{2,2}},
+            {{0,0},{1,0},{2,0}},
+            {{0,1},{1,1},{2,1}},
+            {{0,2},{1,2},{2,2}},
+            {{0,0},{1,1},{2,2}},
+            {{0,2},{1,1},{2,0}},
+        };
+        int n = 0;
+        for (int li = 0; li < 8; ++li) {
+            int p = 0, o = 0;
+            for (int k = 0; k < 3; ++k) {
+                Cell c = b.get(lines[li][k][0], lines[li][k][1]);
+                if (c == me)        ++p;
+                else if (c == them) ++o;
+            }
+            if (p == 2 && o == 0) ++n;
+        }
+        return n;
+    }
+
     // Score d'une sous-grille pour un joueur: somme de lineScore sur
     // les 8 lignes possibles, ponderee par les positions des cases.
     int evalSubBoard(const Board& b, Cell me) {
@@ -159,8 +194,10 @@ int MinimaxPlayer::evaluate(const GameState& state) const {
         }
     }
 
-    // 2) Score de la meta-grille + detection de fork meta.
-    Board metaView = state.board().metaView();
+    // 2) Score de la meta-grille, asymetrique et avec dead-sub blocking.
+    //    Une sous-grille pleine sans gagnant neutralise la ligne meta
+    //    (valeur fantome). Le progres adverse est pondere plus lourd.
+    const UltimateBoard& ub = state.board();
     int lines[8][3][2] = {
         {{0,0},{0,1},{0,2}},
         {{1,0},{1,1},{1,2}},
@@ -174,19 +211,34 @@ int MinimaxPlayer::evaluate(const GameState& state) const {
     int myMetaThreats = 0, oppMetaThreats = 0;
     for (int li = 0; li < 8; ++li) {
         int p = 0, o = 0;
+        bool deadLine = false;
         for (int k = 0; k < 3; ++k) {
-            Cell c = metaView.get(lines[li][k][0], lines[li][k][1]);
-            if (c == me)        ++p;
-            else if (c == them) ++o;
+            int br = lines[li][k][0], bc = lines[li][k][1];
+            Cell sw = ub.subWinner(br, bc);
+            if (sw == me)        ++p;
+            else if (sw == them) ++o;
+            else if (ub.subFinished(br, bc)) { deadLine = true; break; }
         }
-        score += 400 * lineScore(p, o);
+        if (deadLine) continue;
+        int ls = lineScore(p, o);
+        score += (ls >= 0 ? META_MINE : META_OPP) * ls;
         if (p == 2 && o == 0) ++myMetaThreats;
         if (o == 2 && p == 0) ++oppMetaThreats;
     }
-    if (myMetaThreats  >= 2) score += 2000;
-    if (oppMetaThreats >= 2) score -= 2000;
+    if (myMetaThreats  >= 2) score += FORK_MINE;
+    if (oppMetaThreats >= 2) score -= FORK_OPP;
 
-    if (fr < 0) score += FREE_CHOICE_VAL;
+    // 3) Controle du flux. Le joueur au trait doit jouer dans la sous-
+    //    grille forcee: y completer une 2-en-ligne est un avantage,
+    //    devoir bloquer celle de l'adversaire un malus (pondere plus
+    //    lourd). En libre choix, c'est lui qui a l'avantage de placement.
+    if (fr < 0) {
+        score += FREE_CHOICE_VAL;
+    } else {
+        const Board& fs = ub.sub(fr, fc);
+        score += FORCED_MY_OPEN   * countOpenTwos(fs, me);
+        score -= FORCED_THEM_OPEN * countOpenTwos(fs, them);
+    }
 
     return score;
 }

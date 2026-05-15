@@ -58,13 +58,3 @@ bool UltimateBoard::allSubFinished() const {
     }
     return true;
 }
-
-Board UltimateBoard::metaView() const {
-    Board view;
-    for (int br = 0; br < 3; ++br) {
-        for (int bc = 0; bc < 3; ++bc) {
-            view.set(br, bc, subs_[br][bc].winner());
-        }
-    }
-    return view;
-}
