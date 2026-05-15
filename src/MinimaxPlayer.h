@@ -5,7 +5,6 @@
 
 #include <chrono>
 #include <cstdint>
-#include <unordered_map>
 #include <vector>
 
 // Joueur base sur l'algorithme negamax (variante symetrique du minimax)
@@ -41,12 +40,19 @@ private:
 
     enum TTFlag : char { TT_EXACT = 0, TT_LOWER = 1, TT_UPPER = 2 };
     struct TTEntry {
-        std::int32_t score;
-        std::int16_t depth;
-        TTFlag       flag;
-        Move         best;
+        std::uint64_t key   = 0;   // 0 = creneau vide
+        std::int32_t  score = 0;
+        std::int16_t  depth = 0;
+        TTFlag        flag  = TT_EXACT;
+        Move          best;
     };
-    mutable std::unordered_map<std::uint64_t, TTEntry> tt_;
+    // Table de transposition en tableau fixe direct-mapped (index =
+    // hash & TT_MASK). Bien plus rapide qu'un unordered_map: pas
+    // d'allocation ni de chainage par noeud. La cle complete est stockee
+    // pour distinguer les collisions d'index.
+    static constexpr std::size_t   TT_SIZE = std::size_t(1) << 22; // 4M
+    static constexpr std::uint64_t TT_MASK = TT_SIZE - 1;
+    mutable std::vector<TTEntry> tt_;
 
     // Killer moves: pour chaque ply (distance depuis la racine), on retient
     // les 2 derniers coups qui ont produit une coupure beta. Ces coups
@@ -54,6 +60,12 @@ private:
     // positions analogues -> meilleur move ordering -> plus de coupures.
     static constexpr int KILLERS_MAX_PLY = 32;
     Move killers_[KILLERS_MAX_PLY][2];
+
+    // Heuristique d'historique: pour chaque (cote au trait, case cible
+    // 0..80), score cumule des coupures beta produites par ce coup. Un
+    // coup qui coupe souvent ailleurs est essaye plus tot -> meilleur
+    // move ordering -> recherche plus profonde a budget egal.
+    int history_[2][81];
 
     // Buffers de coups pre-alloues, un par profondeur de recherche.
     // Evite l'allocation d'un std::vector a chaque appel de negamax/

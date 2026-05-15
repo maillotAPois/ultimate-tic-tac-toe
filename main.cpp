@@ -45,11 +45,10 @@ int main() {
     // (alternance automatique X/O sur les 100 parties).
     game.initialize(100, Level::MEDIUM_2, Mode::ARENA, false, "RomThpt");
 
-    // Contraintes prof: 100 parties < 6 min total. Avec apply/undo,
-    // 70ms/coup donne ~3 min total => on peut doubler le budget. 140ms
-    // devrait tenir dans ~6 min avec confort.
-    // depth=1 plancher (iterative deepening termine toujours), maxDepth=12.
-    MinimaxPlayer ai(/*depth=*/1, /*maxDepth=*/12, /*budgetMs=*/270);
+    // Budget 250 ms: le framework plafonne le temps mesure par coup a
+    // ~400 ms (overhead compris). 250 ms laisse une marge de securite.
+    // depth=1 plancher (iterative deepening termine toujours).
+    MinimaxPlayer ai(/*depth=*/1, /*maxDepth=*/12, /*budgetMs=*/250);
 
     while (!game.isAllGameFinish()) {
         playOneGame(ai);

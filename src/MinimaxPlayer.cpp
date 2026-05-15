@@ -37,12 +37,16 @@ MinimaxPlayer::MinimaxPlayer(int depth, int maxDepth, int budgetMs)
     : depth_(depth)
     , maxDepth_(maxDepth)
     , budgetMs_(budgetMs)
+    , tt_(TT_SIZE)
     , moveBufs_(MOVE_BUFS_MAX)
 {
     for (int i = 0; i < KILLERS_MAX_PLY; ++i) {
         killers_[i][0] = Move();
         killers_[i][1] = Move();
     }
+    for (int s = 0; s < 2; ++s)
+        for (int c = 0; c < 81; ++c)
+            history_[s][c] = 0;
     for (int i = 0; i < MOVE_BUFS_MAX; ++i) {
         moveBufs_[i].reserve(20);
     }
@@ -220,12 +224,15 @@ Move MinimaxPlayer::chooseMove(const GameState& constState) {
         if (win) return moves[i];
     }
 
-    // TT persiste entre coups (cap 2M entrees).
-    if (tt_.size() > 2000000) tt_.clear();
+    // TT en tableau fixe: persiste entre coups, pas de purge necessaire
+    // (les creneaux sont ecrases, les collisions detectees par la cle).
     for (int i = 0; i < KILLERS_MAX_PLY; ++i) {
         killers_[i][0] = Move();
         killers_[i][1] = Move();
     }
+    for (int s = 0; s < 2; ++s)
+        for (int c = 0; c < 81; ++c)
+            history_[s][c] = 0;
 
     // Move ordering racine via apply/undo.
     std::vector<Scored> ordered;
@@ -297,18 +304,17 @@ int MinimaxPlayer::negamax(GameState& state, int depth, int ply, int alpha, int 
     int alphaOrig = alpha;
     std::uint64_t key = hashState(state);
     Move ttBest;  // invalide par defaut
-    auto it = tt_.find(key);
-    if (it != tt_.end() && it->second.depth >= depth) {
-        const TTEntry& e = it->second;
-        if (e.flag == TT_EXACT) return e.score;
-        if (e.flag == TT_LOWER && e.score > alpha) alpha = e.score;
-        else if (e.flag == TT_UPPER && e.score < beta) beta = e.score;
-        if (alpha >= beta) return e.score;
-        ttBest = e.best;
-    } else if (it != tt_.end()) {
-        // Profondeur insuffisante: on garde quand meme la best move pour
+    const TTEntry& probe = tt_[key & TT_MASK];
+    if (probe.key == key) {
+        if (probe.depth >= depth) {
+            if (probe.flag == TT_EXACT) return probe.score;
+            if (probe.flag == TT_LOWER && probe.score > alpha) alpha = probe.score;
+            else if (probe.flag == TT_UPPER && probe.score < beta) beta = probe.score;
+            if (alpha >= beta) return probe.score;
+        }
+        // Profondeur insuffisante ou bornes: on garde la best move pour
         // le move ordering.
-        ttBest = it->second.best;
+        ttBest = probe.best;
     }
 
     if (state.isFinished()) {
@@ -322,45 +328,40 @@ int MinimaxPlayer::negamax(GameState& state, int depth, int ply, int alpha, int 
     state.legalMoves(moves);
     if (moves.empty()) return evaluate(state);
 
+    const Cell mover = state.currentPlayer();
+    const int  si    = (mover == Cell::X) ? 0 : 1;
+
     // Move ordering: PV move (TT best) d'abord, puis tri par eval si la
     // profondeur restante le justifie. Seuil 4: a profondeur 1-3 le tri
     // par eval coute autant que la recherche elle-meme.
     std::vector<Scored> ordered;
     ordered.reserve(moves.size());
-    // Bonus prioritaires (plus grands que tout score eval):
+    // Bonus prioritaires (plus grands que tout score eval ou historique):
     //   ttBest = +2_000_000 (PV move connue)
-    //   killer = +1_000_000 (coup ayant produit une coupure ailleurs au meme ply)
+    //   killer = +1_000_000 (coup ayant produit une coupure au meme ply)
+    //   sinon  = score d'historique (coupures beta cumulees de ce coup)
+    auto orderBonus = [&](const Move& m) -> int {
+        if (ttBest.isValid() && m.row == ttBest.row && m.col == ttBest.col)
+            return 2000000;
+        if (isKiller(ply, m))
+            return 1000000;
+        return history_[si][m.row * 9 + m.col];
+    };
     if (depth >= 4) {
         for (size_t i = 0; i < moves.size(); ++i) {
             int pf_r = state.forcedSubRow(), pf_c = state.forcedSubCol();
             state.applyMove(moves[i]);
             int s = -evaluate(state);
             state.undoMove(moves[i], pf_r, pf_c);
-            if (ttBest.isValid() &&
-                moves[i].row == ttBest.row && moves[i].col == ttBest.col) {
-                s += 2000000;
-            } else if (isKiller(ply, moves[i])) {
-                s += 1000000;
-            }
-            ordered.push_back({moves[i], s});
+            ordered.push_back({moves[i], s + orderBonus(moves[i])});
         }
-        std::sort(ordered.begin(), ordered.end(),
-                  [](const Scored& a, const Scored& b) { return a.score > b.score; });
     } else {
-        // Profondeur faible: bonus statique pour ttBest puis killers.
         for (size_t i = 0; i < moves.size(); ++i) {
-            int s = 0;
-            if (ttBest.isValid() &&
-                moves[i].row == ttBest.row && moves[i].col == ttBest.col) {
-                s = 2000000;
-            } else if (isKiller(ply, moves[i])) {
-                s = 1000000;
-            }
-            ordered.push_back({moves[i], s});
+            ordered.push_back({moves[i], orderBonus(moves[i])});
         }
-        std::sort(ordered.begin(), ordered.end(),
-                  [](const Scored& a, const Scored& b) { return a.score > b.score; });
     }
+    std::sort(ordered.begin(), ordered.end(),
+              [](const Scored& a, const Scored& b) { return a.score > b.score; });
 
     // PVS (Principal Variation Search): le premier coup (PV) est cherche
     // en fenetre complete; les suivants en fenetre nulle [alpha, alpha+1]
@@ -371,41 +372,63 @@ int MinimaxPlayer::negamax(GameState& state, int depth, int ply, int alpha, int 
     Move bestMove = ordered[0].move;
     for (size_t i = 0; i < ordered.size(); ++i) {
         int pf_r = state.forcedSubRow(), pf_c = state.forcedSubCol();
-        state.applyMove(ordered[i].move);
+        const Move& mv = ordered[i].move;
+        state.applyMove(mv);
         int score;
         if (i == 0) {
             score = -negamax(state, depth - 1, ply + 1, -beta, -alpha, ctx);
         } else {
-            score = -negamax(state, depth - 1, ply + 1, -alpha - 1, -alpha, ctx);
+            // LMR: les coups tardifs, non tactiques et hors killers sont
+            // d'abord cherches a profondeur reduite (fenetre nulle). S'ils
+            // depassent alpha, re-recherche a profondeur pleine. Les coups
+            // tactiques (gain de sous-grille ou global) ne sont pas reduits.
+            bool tactical = (state.winner() != Cell::EMPTY) ||
+                            (state.board().subWinner(mv.row / 3, mv.col / 3) == mover);
+            int reduction = 0;
+            if (depth >= 3 && i >= 3 && !tactical && !isKiller(ply, mv)) {
+                reduction = (i >= 6 && depth >= 6) ? 2 : 1;
+            }
+            score = -negamax(state, depth - 1 - reduction, ply + 1,
+                             -alpha - 1, -alpha, ctx);
+            if (!ctx.stop && reduction > 0 && score > alpha) {
+                score = -negamax(state, depth - 1, ply + 1,
+                                 -alpha - 1, -alpha, ctx);
+            }
             if (!ctx.stop && score > alpha && score < beta) {
                 score = -negamax(state, depth - 1, ply + 1, -beta, -alpha, ctx);
             }
         }
-        state.undoMove(ordered[i].move, pf_r, pf_c);
+        state.undoMove(mv, pf_r, pf_c);
         if (ctx.stop) return 0;
         if (score > WIN_VAL - 1000)        score -= WIN_DEPTH_PENALTY;
         else if (score < -WIN_VAL + 1000)  score += WIN_DEPTH_PENALTY;
         if (score > best) {
             best     = score;
-            bestMove = ordered[i].move;
+            bestMove = mv;
         }
         if (best > alpha)  alpha = best;
         if (alpha >= beta) {
-            // Coupure beta: mémoriser ce coup comme killer pour ce ply.
-            recordKiller(ply, ordered[i].move);
+            // Coupure beta: ce coup devient killer pour ce ply et son
+            // score d'historique est renforce (pondere par la profondeur).
+            recordKiller(ply, mv);
+            history_[si][mv.row * 9 + mv.col] += depth * depth;
             break;
         }
     }
 
-    // Stockage TT
-    TTEntry e;
-    e.score = best;
-    e.depth = static_cast<std::int16_t>(depth);
-    e.best  = bestMove;
-    if (best <= alphaOrig)      e.flag = TT_UPPER;
-    else if (best >= beta)      e.flag = TT_LOWER;
-    else                        e.flag = TT_EXACT;
-    tt_[key] = e;
+    // Stockage TT: remplacement preferant la profondeur. On ecrase si le
+    // creneau est vide, occupe par une autre position, ou par une entree
+    // moins profonde.
+    TTEntry& slot = tt_[key & TT_MASK];
+    if (slot.key != key || depth >= slot.depth) {
+        slot.key   = key;
+        slot.score = best;
+        slot.depth = static_cast<std::int16_t>(depth);
+        slot.best  = bestMove;
+        if (best <= alphaOrig)      slot.flag = TT_UPPER;
+        else if (best >= beta)      slot.flag = TT_LOWER;
+        else                        slot.flag = TT_EXACT;
+    }
 
     return best;
 }
