@@ -116,11 +116,12 @@ Usage : `./selfplay <depthA> <depthB>` (profondeur fixe, budget illimité).
 |---|---|
 | depth 9 vs depth 9 | 50,4 % (sanité OK) |
 | **depth 11 vs depth 9** | **75,6 %** |
+| **depth 12 vs depth 9** | **86,7 %** |
 | depth 11 + beam(12) vs depth 9 | 73,4 % |
 
-**+2 plies = +25 pp de force.** Comme depth-9 ≈ MEDIUM_2, **depth-11
-contre le bot ≈ 75 %**, depth-12 dépasserait 80 %. La profondeur règle
-le problème — c'est prouvé, chiffré, sans bruit.
+Comme depth-9 ≈ MEDIUM_2 : **depth-11 contre le bot ≈ 75 %, depth-12
+≈ 85 %+**. La cible exacte pour valider 80 % est **depth-12**. La
+profondeur règle le problème — prouvé, chiffré, sans bruit.
 
 ## Le mur : la vitesse
 
