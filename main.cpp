@@ -1,21 +1,36 @@
 #include "main.h"
 #include "src/GameState.h"
-#include "src/MCTSPlayer.h"
-
-#include <cstdio>
+#include "src/MinimaxPlayer.h"
 
 namespace {
 
+// Joue une partie complete contre l'IA fournie via `game`.
+// Met a jour notre etat interne en suivant les coups adverses
+// renvoyes par `game.getMove(...)`.
+//
+// Sequencement par tour:
+//   1) game.getMove(opp)   -> recuperer le coup adverse (vide au 1er tour
+//                              si nous commencons)
+//   2) state.applyMove     -> alterne le joueur courant vers nous
+//   3) ai.chooseMove       -> calcule notre coup
+//   4) state.applyMove     -> alterne le joueur courant vers l'adversaire
+//   5) game.setMove        -> envoie au framework
 void playOneGame(AIPlayer& ai) {
     GameState state;
+
     while (!game.isFinish()) {
+        // 1) Recuperer le coup adverse (si disponible)
         GameMove opponentMove;
         game.getMove(opponentMove);
         if (opponentMove.row >= 0 && opponentMove.col >= 0) {
             state.applyMove(Move(opponentMove.row, opponentMove.col));
         }
+
+        // 2) Calculer notre coup et l'appliquer localement
         Move ourMove = ai.chooseMove(state);
         state.applyMove(ourMove);
+
+        // 3) Envoyer le coup au framework
         GameMove out = { ourMove.row, ourMove.col };
         game.setMove(out);
     }
@@ -24,17 +39,20 @@ void playOneGame(AIPlayer& ai) {
 } // namespace
 
 int main() {
-    game.initialize(100, Level::VERY_HARD_2, Mode::ARENA, false, "RomThpt");
-    MCTSPlayer ai(/*budgetMs=*/140, /*cExplore=*/1.4);
-    int W = 0, L = 0, D = 0;
+    // Initialisation: 100 parties en mode Arene contre MEDIUM_2.
+    // Pour valider un niveau il faut au minimum 80% de victoires
+    // (egalites non comptees). alwaysPlayFirst est ignore en mode Arene
+    // (alternance automatique X/O sur les 100 parties).
+    game.initialize(100, Level::MEDIUM_2, Mode::ARENA, false, "RomThpt");
+
+    // Budget 250 ms: le framework plafonne le temps mesure par coup a
+    // ~400 ms (overhead compris). 250 ms laisse une marge de securite.
+    // depth=1 plancher (iterative deepening termine toujours).
+    MinimaxPlayer ai(/*depth=*/1, /*maxDepth=*/12, /*budgetMs=*/250);
+
     while (!game.isAllGameFinish()) {
         playOneGame(ai);
-        Winner w = game.getWinner();
-        if      (w == IA)     ++W;
-        else if (w == PLAYER) ++L;
-        else                  ++D;
     }
-    std::fprintf(stderr, "FINAL W=%d L=%d D=%d  rate=%.1f%%\n",
-        W, L, D, (W+L) > 0 ? 100.0 * W / (W + L) : 0.0);
+
     return 0;
 }

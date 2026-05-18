@@ -3,6 +3,7 @@
 
 #include "UltimateBoard.h"
 #include "Move.h"
+#include <cstdint>
 #include <vector>
 
 // Etat complet d'une partie d'Ultimate Tic-Tac-Toe:
@@ -29,6 +30,10 @@ public:
     // de redirection UTTT.
     std::vector<Move> legalMoves() const;
 
+    // Overload reutilisable: vide `out` puis remplit. Evite l'allocation
+    // d'un nouveau vector a chaque appel dans le chemin chaud.
+    void legalMoves(std::vector<Move>& out) const;
+
     // Verifie si un coup donne est legal sans le jouer.
     bool isLegal(const Move& m) const;
 
@@ -44,12 +49,16 @@ public:
 
     const UltimateBoard& board() const { return board_; }
 
+    // Hash Zobrist maintenu incrementalement par apply/undoMove. O(1).
+    std::uint64_t hash() const { return hash_; }
+
 private:
     UltimateBoard board_;
     Cell          currentPlayer_;
     int           forcedSubRow_;
     int           forcedSubCol_;
     int           moveCount_;
+    std::uint64_t hash_;
 };
 
 #endif // GAME_STATE_H
