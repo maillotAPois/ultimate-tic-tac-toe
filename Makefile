@@ -12,16 +12,9 @@ TARGET   := uttt.exe
 
 WINE     := WINEDEBUG=-all wine
 
-.PHONY: all run clean stubs selfplay
+.PHONY: all run clean stubs
 
 all: $(TARGET)
-
-# Harnais de self-play (moteur A vs moteur B), compile en natif: pas de
-# framework, pas de wine, deterministe -> mesure A/B a bruit nul.
-SELFPLAY_SRCS := selfplay.cpp src/Board.cpp src/GameState.cpp \
-                 src/UltimateBoard.cpp src/MinimaxPlayer.cpp
-selfplay: $(SELFPLAY_SRCS)
-	clang++ -std=c++17 -O2 $(INCLUDES) $(SELFPLAY_SRCS) -o selfplay
 
 $(STUBS_C): libUTTTLib.a
 	@mkdir -p build
@@ -40,4 +33,4 @@ run: $(TARGET)
 	$(WINE) ./$(TARGET)
 
 clean:
-	rm -rf build $(TARGET) selfplay
+	rm -rf build $(TARGET)
